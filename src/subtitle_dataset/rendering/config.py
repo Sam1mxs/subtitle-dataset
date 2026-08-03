@@ -7,7 +7,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from subtitle_dataset.contracts import Sha256Hex, UnitFloat
+from subtitle_dataset.contracts import UnitFloat
 
 Channel = Annotated[int, Field(ge=0, le=255)]
 #: RGBA 颜色
@@ -25,8 +25,7 @@ class TextAlign(StrEnum):
 class RenderStyle(BaseModel):
     """字幕渲染样式；相对图像高度的比例参数在渲染时换算为像素。"""
 
-    font_path: str = Field(min_length=1)
-    font_sha256: Sha256Hex
+    font_ids: list[str] = Field(min_length=1, description="候选字体（按优先级，第一个为主字体）")
     font_size_h_ratio: float = Field(gt=0, lt=1)
     letter_spacing_px: float = Field(ge=0)
     line_spacing_px: float = Field(ge=0)
@@ -47,3 +46,7 @@ class RenderConfig(BaseModel):
     style: RenderStyle
     center: Center = (0.5, 0.75)
     inpaint_dilation_px: int = Field(default=3, ge=0)
+    require_ml_training_fonts: bool = Field(
+        default=False,
+        description="为 True 时只允许登记表中 ml_training=True 的字体",
+    )

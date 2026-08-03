@@ -10,6 +10,7 @@ from subtitle_dataset.annotations.masks import alpha_to_inpaint_mask
 from subtitle_dataset.contracts import config_sha256
 
 from .config import RenderConfig
+from .fonts import FontRegistry
 from .layer import render_line_layer
 from .layout import compose_lines, load_font, split_lines
 
@@ -22,7 +23,10 @@ class RenderResult:
     effect_bbox_xyxy: tuple[int, int, int, int]
     line_bboxes_xyxy: list[tuple[int, int, int, int]]
     config_sha256: str
+    font_id: str
     font_sha256: str
+    fallback_used: bool
+    missing_chars: dict[str, list[str]]
 
 
 class PillowRenderer:
@@ -32,10 +36,18 @@ class PillowRenderer:
     与 clean image 合成 → 生成 alpha/inpaint mask 与 bbox。
     """
 
+    def __init__(self, registry: FontRegistry | None = None) -> None:
+        self._registry = registry or FontRegistry.load()
+
     def render(self, clean: Image.Image, config: RenderConfig) -> RenderResult:
         width, height = clean.size
         style = config.style
-        font = load_font(style.font_path, round(style.font_size_h_ratio * height))
+        resolution = self._registry.resolve(
+            config.text,
+            style.font_ids,
+            require_ml_training=config.require_ml_training_fonts,
+        )
+        font = load_font(resolution.font_path, round(style.font_size_h_ratio * height))
 
         line_images = [
             render_line_layer(line, font, style=style, image_height=height)
@@ -86,12 +98,13 @@ class PillowRenderer:
             effect_bbox_xyxy=effect_bbox,
             line_bboxes_xyxy=line_bboxes,
             config_sha256=self._config_sha256(config),
-            font_sha256=style.font_sha256,
+            font_id=resolution.font_id,
+            font_sha256=resolution.font_sha256,
+            fallback_used=resolution.fallback_used,
+            missing_chars=resolution.missing_chars,
         )
 
     @staticmethod
     def _config_sha256(config: RenderConfig) -> str:
-        """配置哈希不包含字体路径，保证跨机器可复现。"""
-        payload = config.model_dump(mode="json")
-        payload["style"].pop("font_path")
-        return config_sha256(payload)
+        """配置哈希：配置中只含字体 ID，不含任何存储路径。"""
+        return config_sha256(config.model_dump(mode="json"))

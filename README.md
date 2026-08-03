@@ -60,3 +60,11 @@ src/subtitle_dataset/
 - 配对：`clean_image` 与 `rendered_image` 必须来自同一次解码结果，pilot 阶段使用
   PNG/无损 WebP，禁止分别有损编码。
 - 可复现：`sample_id` 与 `config_sha256` 由确定性哈希生成，不含存储路径。
+
+## 字体
+
+- 登记表：[assets/fonts/registry.json](assets/fonts/registry.json)，记录字体文件的
+  SHA-256 与许可证（是否允许再分发、是否允许用于 ML 训练）。
+- 未登记字体禁止进入渲染管线；渲染前会做 glyph 覆盖检查，主字体缺字时按
+  `font_ids` 顺序 fallback，并在输出中记录实际使用的字体与缺字清单。
+- 许可证明细见 [assets/fonts/LICENSES/](assets/fonts/LICENSES/)。

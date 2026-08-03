@@ -1,9 +1,10 @@
 {
-  "description": "固定字体(msyh.ttc) + 固定 clean 图像(make_clean_image seed=7) + 固定 RenderConfig 的渲染输出摘要",
-  "font_sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
-  "rendered_sha256": "98787636d8d940230e9f91e1d6fd032c5afb108e5fc9ea0d9954d7aeabe51ed2",
-  "alpha_sha256": "c2836cc0f15b84c4d288a07e3b1a0052c84d07d2daff9b1052b806372bb1defc",
-  "inpaint_mask_sha256": "2498726ed34e4bd6adfab2ba62838f4772869bdaf04ce8c084fd7b46cda55f6d",
-  "effect_bbox_xyxy": [49, 462, 311, 499],
-  "config_sha256": "663cc12a4f05ed496675a36ab95e8b2c985b469c200c409f9700b5ecb96c7b72"
+  "description": "固定字体(Noto Sans CJK SC) + 固定 clean 图像(make_clean_image seed=7) + 固定 RenderConfig 的渲染输出摘要",
+  "font_id": "noto-sans-cjk-sc",
+  "font_sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+  "rendered_sha256": "7dbd999812b05b9c34034cfa5786938875c44e9f782a881a839bd70f24db3abe",
+  "alpha_sha256": "0ce0da0bca2322d2e9dda2c4bf73b4dfbedc0742d12ffe4bf4a07d2b0e9b91c5",
+  "inpaint_mask_sha256": "83d75de65bee623edb067a38955c71e97c27d5d588c5fe94c5cc63ed41fba265",
+  "effect_bbox_xyxy": [50, 461, 310, 499],
+  "config_sha256": "f9d56e024c1a39522eb67b6a7e4cc3dd1f5951c6bd45ac8c842bf14234a4041f"
 }

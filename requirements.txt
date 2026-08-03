@@ -4,6 +4,7 @@
 # 运行时依赖
 pydantic>=2.7,<3
 pillow>=10.4,<13
+fonttools>=4.50
 
 # 开发 / 测试 / 静态检查
 pytest>=8.0,<9

@@ -48,7 +48,10 @@ def _cmd_render(args: argparse.Namespace) -> int:
         "effect_bbox_xyxy": result.effect_bbox_xyxy,
         "line_bboxes_xyxy": result.line_bboxes_xyxy,
         "config_sha256": result.config_sha256,
+        "font_id": result.font_id,
         "font_sha256": result.font_sha256,
+        "fallback_used": result.fallback_used,
+        "missing_chars": result.missing_chars,
     }
     (args.outdir / "metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2),

@@ -14,8 +14,7 @@ DEJAVU_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 def _style(**overrides: Any) -> RenderStyle:
     base: dict[str, Any] = {
-        "font_path": DEJAVU_FONT,
-        "font_sha256": "0" * 64,
+        "font_ids": ["dejavu-sans"],
         "font_size_h_ratio": 0.05,
         "letter_spacing_px": 0.0,
         "line_spacing_px": 0.0,

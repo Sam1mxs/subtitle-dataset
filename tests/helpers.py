@@ -131,12 +131,11 @@ def make_clean_image(width: int = 360, height: int = 640, seed: int = 7) -> Imag
 
 
 def default_render_config(text: str = "今天晚上一起吃饭") -> RenderConfig:
-    """默认渲染配置：白字黑描边、居中、纵向 0.75。"""
+    """默认渲染配置：白字黑描边、居中、纵向 0.75（主字体 Noto Sans CJK SC）。"""
     return RenderConfig(
         text=text,
         style=RenderStyle(
-            font_path=SYSTEM_CJK_FONT,
-            font_sha256=SYSTEM_CJK_FONT_SHA256,
+            font_ids=["noto-sans-cjk-sc", "msyh"],
             font_size_h_ratio=0.05,
             letter_spacing_px=1.2,
             line_spacing_px=4.0,

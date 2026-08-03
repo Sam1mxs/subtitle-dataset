@@ -1,0 +1,50 @@
+{
+  "version": "1",
+  "fonts": [
+    {
+      "id": "noto-sans-cjk-sc",
+      "family": "Noto Sans CJK SC",
+      "file": "NotoSansCJKsc-Regular.otf",
+      "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+      "license": {
+        "name": "OFL-1.1（思源黑体 / Noto Sans CJK）",
+        "spdx": "OFL-1.1",
+        "redistributable": true,
+        "ml_training": true,
+        "notes": "Google Noto 项目，与 Adobe 思源黑体同源；随仓库分发"
+      },
+      "source_url": "https://github.com/notofonts/noto-cjk",
+      "registered_at": "2026-08-03"
+    },
+    {
+      "id": "msyh",
+      "family": "Microsoft YaHei",
+      "file": "/usr/share/fonts/chinese/msyh.ttc",
+      "sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+      "license": {
+        "name": "Microsoft 专有字体许可",
+        "spdx": null,
+        "redistributable": false,
+        "ml_training": false,
+        "notes": "仅限本机开发与测试，不可再分发、不可用于训练数据"
+      },
+      "source_url": null,
+      "registered_at": "2026-08-03"
+    },
+    {
+      "id": "dejavu-sans",
+      "family": "DejaVu Sans",
+      "file": "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+      "sha256": "437a5ecec2ec177cba9284cbffc56055311347f3e9fe4f2b4b40323d0290a6db",
+      "license": {
+        "name": "DejaVu（基于 Bitstream Vera 的自由许可）",
+        "spdx": null,
+        "redistributable": true,
+        "ml_training": true,
+        "notes": "拉丁文备用字体，适合作为 fallback 链中的西文兜底"
+      },
+      "source_url": "https://dejavu-fonts.github.io/",
+      "registered_at": "2026-08-03"
+    }
+  ]
+}
