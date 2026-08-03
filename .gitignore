@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 虚拟环境
+.venv/
+venv/
+
+# 构建产物
+build/
+dist/
+
+# 大规模数据（不进代码仓库，按设计文档 §13 存放）
+raw/
+derived/
+manifests/
+shards/
+reports/
+
+# 本地配置覆盖
+.env
+*.local

@@ -1,0 +1,11 @@
+# 视频字幕数据集管线 — 运行与开发依赖
+# 创建环境后首次安装成功，可用 `pip freeze > requirements.lock` 固化精确版本。
+
+# 运行时依赖
+pydantic>=2.7,<3
+
+# 开发 / 测试 / 静态检查
+pytest>=8.0,<9
+ruff>=0.5,<1
+mypy>=1.10,<2
+pre-commit>=3.7,<5
