@@ -1,0 +1,20 @@
+{
+  "text": "今天晚上一起吃饭",
+  "style": {
+    "font_path": "/usr/share/fonts/chinese/msyh.ttc",
+    "font_sha256": "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577",
+    "font_size_h_ratio": 0.035,
+    "letter_spacing_px": 1.2,
+    "line_spacing_px": 4.0,
+    "stroke_width_h_ratio": 0.002,
+    "opacity": 1.0,
+    "align": "center",
+    "fill_color": [255, 255, 255, 255],
+    "stroke_color": [0, 0, 0, 255],
+    "shadow_color": [0, 0, 0, 255],
+    "shadow_offset_xy": [0.0, 0.0],
+    "shadow_blur_px": 0.0
+  },
+  "center": [0.5, 0.75],
+  "inpaint_dilation_px": 3
+}

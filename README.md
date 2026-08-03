@@ -29,7 +29,12 @@ ruff format --check src     # 格式检查
 mypy                        # 类型检查
 subtitle-dataset validate-sample sample.json
 subtitle-dataset validate-manifest manifest.json
+subtitle-dataset render --clean clean.png --config configs/styles/default.json --outdir out/
 ```
+
+`render` 输出 `rendered.png`（合成字幕图）、`alpha.png`（alpha mask）、
+`mask.png`（inpaint mask，带膨胀）和 `metadata.json`（effect/line bbox、
+配置哈希），并保证 clean 与 rendered 在 mask 外逐像素一致（见 `qa` 模块）。
 
 ## 目录结构
 

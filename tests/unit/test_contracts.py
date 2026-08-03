@@ -12,9 +12,7 @@ from subtitle_dataset.contracts import Sample, SampleManifest
 from tests.helpers import set_bbox, valid_sample_dict
 
 
-def _with_bbox_and_norm(
-    data: dict[str, Any], xyxy: list[int], norm: list[float]
-) -> dict[str, Any]:
+def _with_bbox_and_norm(data: dict[str, Any], xyxy: list[int], norm: list[float]) -> dict[str, Any]:
     """直接设置像素 bbox 与归一化 bbox（用于构造边界用例）。"""
     data["subtitle"]["bbox_xyxy"] = xyxy
     data["subtitle"]["bbox_normalized"] = norm
