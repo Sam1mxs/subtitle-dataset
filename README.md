@@ -31,6 +31,8 @@ subtitle-dataset validate-sample sample.json
 subtitle-dataset validate-manifest manifest.json
 subtitle-dataset render --clean clean.png --config configs/styles/default.json --outdir out/
 subtitle-dataset generate --clean clean.png --config configs/sampling/default.json --outdir out/ --n 20
+subtitle-dataset probe video.mp4
+subtitle-dataset extract-frames --video video.mp4 --config configs/ingest/default.json --outdir frames/
 ```
 
 `render` 输出 `rendered.png`（合成字幕图）、`alpha.png`（alpha mask）、
@@ -41,6 +43,11 @@ subtitle-dataset generate --clean clean.png --config configs/sampling/default.js
 样式分布和位置分布采样，渲染后校验边界与严格配对，失败自动重试；每个样本
 使用独立种子（`seed + index * 7919`），输出到 `out/samples/{index}/` 并在
 `out/manifest.json` 汇总。
+
+`extract-frames` 是阶段三 pilot：ffprobe 探测原生帧率/time_base/色彩 → showinfo
+建立帧索引↔PTS↔毫秒时间轴 → scene 滤镜切分场景 → 每场景抽代表帧 → 保持几何比例的
+居中裁剪，输出帧文件与 `manifest.json`（含每个帧的原生 PTS、裁剪信息、图像哈希）。
+抽出的帧目录可以直接作为 `generate --clean` 的输入，把真实帧接进采样闭环。
 
 ## 目录结构
 

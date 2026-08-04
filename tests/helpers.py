@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import random
+import subprocess
+from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw
@@ -157,3 +160,39 @@ def png_sha256(image: Image.Image) -> str:
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     return hashlib.sha256(buf.getvalue()).hexdigest()
+
+
+def make_synthetic_video(
+    path: Path,
+    *,
+    duration_per_segment: float = 1.5,
+    size: str = "640x360",
+) -> None:
+    """生成两段不同纯色的 30fps 测试视频（红→蓝，1.5s 处有明确镜头切换）。"""
+    env = {key: value for key, value in os.environ.items() if key != "LD_LIBRARY_PATH"}
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=red:d={duration_per_segment}:s={size}:r=30",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=blue:d={duration_per_segment}:s={size}:r=30",
+            "-filter_complex",
+            "[0:v][1:v]concat=n=2:v=1[v]",
+            "-map",
+            "[v]",
+            "-pix_fmt",
+            "yuv420p",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        env=env,
+    )

@@ -12,8 +12,10 @@ from typing import Any
 from PIL import Image
 
 from .contracts import Sample, SampleManifest
+from .media import IngestConfig, probe_video
 from .rendering import PillowRenderer, RenderConfig
 from .sampling import SampleSampler, SamplingConfig
+from .workflows import run_ingest
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -63,12 +65,21 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 
 def _cmd_generate(args: argparse.Namespace) -> int:
-    clean = Image.open(args.clean).convert("RGB")
     config = SamplingConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
     sampler = SampleSampler(config)
     args.outdir.mkdir(parents=True, exist_ok=True)
     records = []
+    frame_paths: list[Path] | None = None
+    if args.clean.is_dir():
+        frame_paths = sorted(args.clean.glob("*.png"))
+        if not frame_paths:
+            print("ERROR: 帧目录中没有 PNG 文件", file=sys.stderr)
+            return 2
     for index in range(args.n):
+        if frame_paths is not None:
+            clean = Image.open(frame_paths[index % len(frame_paths)]).convert("RGB")
+        else:
+            clean = Image.open(args.clean).convert("RGB")
         sample = sampler.sample(clean, index)
         sample_dir = args.outdir / "samples" / f"{index:05d}"
         sample_dir.mkdir(parents=True, exist_ok=True)
@@ -94,6 +105,22 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_probe(args: argparse.Namespace) -> int:
+    probe = probe_video(args.video)
+    print(probe.model_dump_json(indent=2))
+    return 0
+
+
+def _cmd_extract_frames(args: argparse.Namespace) -> int:
+    config = IngestConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
+    report = run_ingest(args.video, config, args.outdir)
+    print(
+        f"OK: {len(report.scenes)} 个场景，{len(report.frames)} 帧，"
+        f"{len(report.failures)} 个失败 → {args.outdir}"
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="subtitle-dataset", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -115,12 +142,22 @@ def main(argv: list[str] | None = None) -> int:
     p_generate.add_argument("--outdir", type=Path, required=True, help="输出目录")
     p_generate.add_argument("--n", type=int, default=5, help="生成样本数（默认 5）")
 
+    p_probe = sub.add_parser("probe", help="探测视频元数据（ffprobe JSON）")
+    p_probe.add_argument("video", type=Path, help="视频文件路径")
+
+    p_extract = sub.add_parser("extract-frames", help="视频 pilot：场景切分、抽帧与裁剪")
+    p_extract.add_argument("--video", type=Path, required=True, help="视频文件路径")
+    p_extract.add_argument("--config", type=Path, required=True, help="IngestConfig JSON 路径")
+    p_extract.add_argument("--outdir", type=Path, required=True, help="输出目录")
+
     args = parser.parse_args(argv)
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
         "validate-sample": _cmd_validate_sample,
         "validate-manifest": _cmd_validate_manifest,
         "render": _cmd_render,
         "generate": _cmd_generate,
+        "probe": _cmd_probe,
+        "extract-frames": _cmd_extract_frames,
     }
     handler = handlers[args.command]
     try:
