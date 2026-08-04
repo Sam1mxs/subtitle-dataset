@@ -30,11 +30,17 @@ mypy                        # 类型检查
 subtitle-dataset validate-sample sample.json
 subtitle-dataset validate-manifest manifest.json
 subtitle-dataset render --clean clean.png --config configs/styles/default.json --outdir out/
+subtitle-dataset generate --clean clean.png --config configs/sampling/default.json --outdir out/ --n 20
 ```
 
 `render` 输出 `rendered.png`（合成字幕图）、`alpha.png`（alpha mask）、
 `mask.png`（inpaint mask，带膨胀）和 `metadata.json`（effect/line bbox、
 配置哈希），并保证 clean 与 rendered 在 mask 外逐像素一致（见 `qa` 模块）。
+
+`generate` 是采样闭环：按时长分桶、文本语料（`assets/texts/sample_corpus.txt`）、
+样式分布和位置分布采样，渲染后校验边界与严格配对，失败自动重试；每个样本
+使用独立种子（`seed + index * 7919`），输出到 `out/samples/{index}/` 并在
+`out/manifest.json` 汇总。
 
 ## 目录结构
 

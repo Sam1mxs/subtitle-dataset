@@ -1,0 +1,53 @@
+{
+  "dataset_version": "v1",
+  "seed": 123456,
+  "max_attempts": 20,
+  "inpaint_dilation_px": 3,
+  "require_ml_training_fonts": true,
+  "corpus_path": "assets/texts/sample_corpus.txt",
+  "single_line_prob": 0.75,
+  "durations": {
+    "buckets": [
+      {"min_ms": 130, "max_ms": 270, "weight": 1.0},
+      {"min_ms": 300, "max_ms": 500, "weight": 1.5},
+      {"min_ms": 530, "max_ms": 1000, "weight": 2.0},
+      {"min_ms": 1030, "max_ms": 2000, "weight": 1.5},
+      {"min_ms": 2030, "max_ms": 3000, "weight": 0.8},
+      {"min_ms": 3030, "max_ms": 4000, "weight": 0.4}
+    ]
+  },
+  "style": {
+    "fonts": [
+      {
+        "font_id": "noto-sans-cjk-sc",
+        "weight": 1.0,
+        "size_h_ratio_range": {"min": 0.025, "max": 0.055}
+      }
+    ],
+    "font_size_h_ratio_range": {"min": 0.025, "max": 0.05},
+    "letter_spacing_px_range": {"min": 0.0, "max": 2.0},
+    "line_spacing_px_range": {"min": 0.0, "max": 8.0},
+    "stroke_width_h_ratio_range": {"min": 0.0, "max": 0.006},
+    "opacity_range": {"min": 0.85, "max": 1.0},
+    "align_weights": {"center": 0.85, "left": 0.075, "right": 0.075},
+    "fill_colors": [
+      {"color": [255, 255, 255, 255], "weight": 1.0},
+      {"color": [255, 240, 200, 255], "weight": 0.25},
+      {"color": [0, 0, 0, 255], "weight": 0.05}
+    ],
+    "stroke_colors": [{"color": [0, 0, 0, 255], "weight": 1.0}],
+    "shadow": {
+      "probability": 0.3,
+      "offset_xy_max": [3.0, 3.0],
+      "blur_px_range": {"min": 0.0, "max": 2.0},
+      "colors": [{"color": [0, 0, 0, 255], "weight": 1.0}]
+    }
+  },
+  "position": {
+    "center_y_range": {"min": 0.65, "max": 0.85},
+    "center_x_ranges": [
+      {"range": {"min": 0.45, "max": 0.55}, "weight": 0.7},
+      {"range": {"min": 0.15, "max": 0.85}, "weight": 0.3}
+    ]
+  }
+}

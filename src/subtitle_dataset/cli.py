@@ -13,6 +13,7 @@ from PIL import Image
 
 from .contracts import Sample, SampleManifest
 from .rendering import PillowRenderer, RenderConfig
+from .sampling import SampleSampler, SamplingConfig
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -61,6 +62,38 @@ def _cmd_render(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_generate(args: argparse.Namespace) -> int:
+    clean = Image.open(args.clean).convert("RGB")
+    config = SamplingConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
+    sampler = SampleSampler(config)
+    args.outdir.mkdir(parents=True, exist_ok=True)
+    records = []
+    for index in range(args.n):
+        sample = sampler.sample(clean, index)
+        sample_dir = args.outdir / "samples" / f"{index:05d}"
+        sample_dir.mkdir(parents=True, exist_ok=True)
+        sample.rendered.save(sample_dir / "rendered.png")
+        sample.alpha_mask.save(sample_dir / "alpha.png")
+        sample.inpaint_mask.save(sample_dir / "mask.png")
+        (sample_dir / "sample.json").write_text(
+            sample.record.model_dump_json(indent=2),
+            encoding="utf-8",
+        )
+        records.append(sample.record.model_dump(mode="json"))
+    manifest = {
+        "dataset_version": config.dataset_version,
+        "seed": config.seed,
+        "n": args.n,
+        "samples": records,
+    }
+    (args.outdir / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"OK: {args.n} 个样本已写入 {args.outdir}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="subtitle-dataset", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -76,11 +109,18 @@ def main(argv: list[str] | None = None) -> int:
     p_render.add_argument("--config", type=Path, required=True, help="RenderConfig JSON 路径")
     p_render.add_argument("--outdir", type=Path, required=True, help="输出目录")
 
+    p_generate = sub.add_parser("generate", help="采样并渲染一批严格配对样本")
+    p_generate.add_argument("--clean", type=Path, required=True, help="clean image 路径")
+    p_generate.add_argument("--config", type=Path, required=True, help="SamplingConfig JSON 路径")
+    p_generate.add_argument("--outdir", type=Path, required=True, help="输出目录")
+    p_generate.add_argument("--n", type=int, default=5, help="生成样本数（默认 5）")
+
     args = parser.parse_args(argv)
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
         "validate-sample": _cmd_validate_sample,
         "validate-manifest": _cmd_validate_manifest,
         "render": _cmd_render,
+        "generate": _cmd_generate,
     }
     handler = handlers[args.command]
     try:
