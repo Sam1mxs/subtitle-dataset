@@ -1,0 +1,18 @@
+{
+  "sample_frames": 30,
+  "edge_threshold": 40,
+  "morph_close_size": 5,
+  "min_box_height": 6,
+  "min_box_width": 20,
+  "row_band_min_density": 0.02,
+  "column_min_density": 0.1,
+  "merge_row_gap_px": 4,
+  "merge_col_gap_px": 8,
+  "subtitle_region_y0": 0.55,
+  "iou_threshold": 0.4,
+  "persistence_ratio": 0.6,
+  "position_std_tolerance": 0.05,
+  "content_switch_iou_threshold": 0.75,
+  "watermark_max_area_ratio": 0.06,
+  "watermark_corner_ratio": 0.25
+}

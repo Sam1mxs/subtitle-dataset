@@ -12,6 +12,7 @@ from typing import Any
 from PIL import Image
 
 from .contracts import Sample, SampleManifest
+from .filtering import FilteringConfig, VideoSubtitleFilter
 from .media import IngestConfig, probe_video
 from .rendering import PillowRenderer, RenderConfig
 from .sampling import SampleSampler, SamplingConfig
@@ -121,6 +122,13 @@ def _cmd_extract_frames(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_detect_subtitles(args: argparse.Namespace) -> int:
+    config = FilteringConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
+    report = VideoSubtitleFilter(config).analyze(args.video)
+    print(json.dumps(json.loads(report.model_dump_json()), ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="subtitle-dataset", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -150,6 +158,10 @@ def main(argv: list[str] | None = None) -> int:
     p_extract.add_argument("--config", type=Path, required=True, help="IngestConfig JSON 路径")
     p_extract.add_argument("--outdir", type=Path, required=True, help="输出目录")
 
+    p_detect = sub.add_parser("detect-subtitles", help="检测视频是否带原生硬字幕（启发式）")
+    p_detect.add_argument("--video", type=Path, required=True, help="视频文件路径")
+    p_detect.add_argument("--config", type=Path, required=True, help="FilteringConfig JSON 路径")
+
     args = parser.parse_args(argv)
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
         "validate-sample": _cmd_validate_sample,
@@ -158,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
         "generate": _cmd_generate,
         "probe": _cmd_probe,
         "extract-frames": _cmd_extract_frames,
+        "detect-subtitles": _cmd_detect_subtitles,
     }
     handler = handlers[args.command]
     try:

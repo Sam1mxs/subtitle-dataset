@@ -2,7 +2,7 @@
 
 from .config import IngestConfig
 from .crop import CropConfig, CropResult, CropTarget, crop_and_resize
-from .decode import extract_frame
+from .decode import extract_frame, extract_frames
 from .probe import VideoProbe, VideoStreamProbe, probe_video, sha256_file
 from .scene import Scene, build_scenes, pick_representative_frames
 from .timeline import TimelineFrame, VideoTimeline
@@ -20,6 +20,7 @@ __all__ = [
     "build_scenes",
     "crop_and_resize",
     "extract_frame",
+    "extract_frames",
     "pick_representative_frames",
     "probe_video",
     "sha256_file",

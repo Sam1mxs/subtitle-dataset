@@ -7,16 +7,18 @@ import io
 import os
 import random
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from subtitle_dataset.contracts import compute_sample_id
 from subtitle_dataset.rendering import RenderConfig, RenderStyle
 
 SYSTEM_CJK_FONT = "/usr/share/fonts/chinese/msyh.ttc"
 SYSTEM_CJK_FONT_SHA256 = "3084f1f88369af6bf9989c909024164d953d1e38d08734f05f28ef24b2f9d577"
+NOTO_FONT = Path(__file__).resolve().parents[1] / "assets" / "fonts" / "NotoSansCJKsc-Regular.otf"
 
 IMAGE_WIDTH = 1080
 IMAGE_HEIGHT = 1920
@@ -196,3 +198,75 @@ def make_synthetic_video(
         capture_output=True,
         env=env,
     )
+
+
+def make_text_video(
+    path: Path,
+    *,
+    subtitle_lines: list[str] | None = None,
+    watermark_text: str | None = None,
+    scene_text: str | None = None,
+    duration_frames: int = 60,
+    size: tuple[int, int] = (640, 360),
+    frame_rate: int = 30,
+) -> None:
+    """生成带硬字幕/台标/场景文字的合成视频（用本仓库 Noto 字体渲染）。"""
+    subtitle_font = ImageFont.truetype(str(NOTO_FONT), 28)
+    small_font = ImageFont.truetype(str(NOTO_FONT), 18)
+    with tempfile.TemporaryDirectory() as tmp:
+        frame_dir = Path(tmp) / "frames"
+        frame_dir.mkdir()
+        for index in range(duration_frames):
+            image = Image.new("RGB", size, (36, 40, 52))
+            draw = ImageDraw.Draw(image)
+            if scene_text:
+                draw.text(
+                    (size[0] // 2, size[1] // 2),
+                    scene_text,
+                    font=subtitle_font,
+                    fill=(200, 200, 200),
+                    anchor="mm",
+                    stroke_width=1,
+                    stroke_fill=(0, 0, 0),
+                )
+            if subtitle_lines:
+                line = subtitle_lines[index // 30 % len(subtitle_lines)]
+                draw.text(
+                    (size[0] // 2, int(size[1] * 0.86)),
+                    line,
+                    font=subtitle_font,
+                    fill=(255, 255, 255),
+                    anchor="mm",
+                    stroke_width=2,
+                    stroke_fill=(0, 0, 0),
+                )
+            if watermark_text:
+                draw.text(
+                    (size[0] - 40, 20),
+                    watermark_text,
+                    font=small_font,
+                    fill=(180, 180, 180),
+                    anchor="mm",
+                    stroke_width=1,
+                    stroke_fill=(0, 0, 0),
+                )
+            image.save(frame_dir / f"{index:04d}.png")
+        env = {key: value for key, value in os.environ.items() if key != "LD_LIBRARY_PATH"}
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-framerate",
+                str(frame_rate),
+                "-i",
+                str(frame_dir / "%04d.png"),
+                "-pix_fmt",
+                "yuv420p",
+                str(path),
+            ],
+            check=True,
+            capture_output=True,
+            env=env,
+        )
