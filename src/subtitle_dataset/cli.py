@@ -14,6 +14,11 @@ from PIL import Image
 from .contracts import Sample, SampleManifest
 from .filtering import FilteringConfig, VideoSubtitleFilter
 from .media import IngestConfig, probe_video
+from .qa.distribution import (
+    DistributionReportConfig,
+    build_frame_distribution,
+    build_sample_distribution,
+)
 from .rendering import PillowRenderer, RenderConfig
 from .sampling import SampleSampler, SamplingConfig
 from .workflows import run_ingest
@@ -129,6 +134,26 @@ def _cmd_detect_subtitles(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_distribution_report(args: argparse.Namespace) -> int:
+    config = DistributionReportConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
+    if args.samples is None and args.frames is None:
+        print("ERROR: --samples 或 --frames 至少提供一个", file=sys.stderr)
+        return 2
+    result: dict[str, Any] = {}
+    if args.samples is not None:
+        manifest = _load_json(args.samples)
+        result["samples"] = build_sample_distribution(
+            manifest["samples"],
+            targets=config.duration_targets,
+            tolerance=config.tolerance,
+            min_samples=config.min_samples,
+        ).model_dump(mode="json")
+    if args.frames is not None:
+        result["frames"] = build_frame_distribution(_load_json(args.frames)).model_dump(mode="json")
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="subtitle-dataset", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -162,6 +187,17 @@ def main(argv: list[str] | None = None) -> int:
     p_detect.add_argument("--video", type=Path, required=True, help="视频文件路径")
     p_detect.add_argument("--config", type=Path, required=True, help="FilteringConfig JSON 路径")
 
+    p_distribution = sub.add_parser("distribution-report", help="输出分布报告并与目标对比")
+    p_distribution.add_argument(
+        "--samples", type=Path, default=None, help="generate 输出的 manifest.json"
+    )
+    p_distribution.add_argument(
+        "--frames", type=Path, default=None, help="extract-frames 输出的 manifest.json"
+    )
+    p_distribution.add_argument(
+        "--config", type=Path, required=True, help="DistributionReportConfig JSON 路径"
+    )
+
     args = parser.parse_args(argv)
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
         "validate-sample": _cmd_validate_sample,
@@ -171,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
         "probe": _cmd_probe,
         "extract-frames": _cmd_extract_frames,
         "detect-subtitles": _cmd_detect_subtitles,
+        "distribution-report": _cmd_distribution_report,
     }
     handler = handlers[args.command]
     try:
