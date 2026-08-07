@@ -11,7 +11,7 @@ from typing import Any
 
 from PIL import Image
 
-from .contracts import Sample, SampleManifest
+from .contracts import Sample, SampleManifest, SourceInfo, Transform
 from .filtering import FilteringConfig, VideoSubtitleFilter
 from .media import IngestConfig, probe_video
 from .qa.distribution import (
@@ -21,7 +21,7 @@ from .qa.distribution import (
 )
 from .rendering import PillowRenderer, RenderConfig
 from .sampling import SampleSampler, SamplingConfig
-from .workflows import run_ingest
+from .workflows import frame_sources_and_transforms, run_ingest
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -72,21 +72,58 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 def _cmd_generate(args: argparse.Namespace) -> int:
     config = SamplingConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
-    sampler = SampleSampler(config)
     args.outdir.mkdir(parents=True, exist_ok=True)
     records = []
     frame_paths: list[Path] | None = None
+    sources: list[SourceInfo] = []
+    transforms: list[Transform] = []
+    ffmpeg_version = ""
     if args.clean.is_dir():
         frame_paths = sorted(args.clean.glob("*.png"))
         if not frame_paths:
             print("ERROR: 帧目录中没有 PNG 文件", file=sys.stderr)
             return 2
+        if args.frames_manifest is not None:
+            manifest = _load_json(args.frames_manifest)
+            all_sources, all_transforms = frame_sources_and_transforms(
+                manifest,
+                platform=config.source_platform,
+            )
+            by_name = {
+                Path(record["uri"]).name: (src, transform)
+                for record, src, transform in zip(
+                    manifest["frames"],
+                    all_sources,
+                    all_transforms,
+                    strict=True,
+                )
+            }
+            for frame_path in frame_paths:
+                pair = by_name.get(frame_path.name)
+                if pair is None:
+                    print(
+                        f"ERROR: 帧 {frame_path.name} 不在 frames manifest 中",
+                        file=sys.stderr,
+                    )
+                    return 2
+                sources.append(pair[0])
+                transforms.append(pair[1])
+            ffmpeg_version = manifest.get("ffmpeg_version", "")
+    elif args.frames_manifest is not None:
+        print("ERROR: --frames-manifest 需要 --clean 为帧目录", file=sys.stderr)
+        return 2
+    sampler = SampleSampler(config, ffmpeg_version=ffmpeg_version)
     for index in range(args.n):
         if frame_paths is not None:
             clean = Image.open(frame_paths[index % len(frame_paths)]).convert("RGB")
         else:
             clean = Image.open(args.clean).convert("RGB")
-        sample = sampler.sample(clean, index)
+        sample = sampler.sample(
+            clean,
+            index,
+            source=sources[index % len(sources)] if sources else None,
+            transform=transforms[index % len(transforms)] if transforms else None,
+        )
         sample_dir = args.outdir / "samples" / f"{index:05d}"
         sample_dir.mkdir(parents=True, exist_ok=True)
         sample.rendered.save(sample_dir / "rendered.png")
@@ -174,6 +211,12 @@ def main(argv: list[str] | None = None) -> int:
     p_generate.add_argument("--config", type=Path, required=True, help="SamplingConfig JSON 路径")
     p_generate.add_argument("--outdir", type=Path, required=True, help="输出目录")
     p_generate.add_argument("--n", type=int, default=5, help="生成样本数（默认 5）")
+    p_generate.add_argument(
+        "--frames-manifest",
+        type=Path,
+        default=None,
+        help="extract-frames 的 manifest.json（把原生时间/来源写进样本）",
+    )
 
     p_probe = sub.add_parser("probe", help="探测视频元数据（ffprobe JSON）")
     p_probe.add_argument("video", type=Path, help="视频文件路径")

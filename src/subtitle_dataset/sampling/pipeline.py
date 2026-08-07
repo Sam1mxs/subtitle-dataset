@@ -8,9 +8,11 @@ from dataclasses import dataclass
 from PIL import Image
 from pydantic import BaseModel
 
+from subtitle_dataset.contracts import BuildInfo, SourceInfo, Transform
 from subtitle_dataset.qa import check_strict_pairing
 from subtitle_dataset.rendering import PillowRenderer
 from subtitle_dataset.rendering.config import RenderConfig, RenderStyle
+from subtitle_dataset.rendering.renderer import RENDERER_VERSION
 
 from .config import REPO_ROOT, SamplingConfig
 from .durations import DurationSampler
@@ -42,6 +44,9 @@ class GeneratedSampleRecord(BaseModel):
     missing_chars: dict[str, list[str]]
     pairing_ok: bool
     max_abs_diff_outside_mask: int
+    source: SourceInfo | None = None
+    transform: Transform | None = None
+    build: BuildInfo | None = None
 
 
 @dataclass(frozen=True)
@@ -64,13 +69,26 @@ class SampleSampler:
         config: SamplingConfig,
         *,
         renderer: PillowRenderer | None = None,
+        ffmpeg_version: str = "",
     ) -> None:
         self._config = config
         self._renderer = renderer or PillowRenderer()
+        self._ffmpeg_version = ffmpeg_version
         corpus_path = REPO_ROOT / config.corpus_path
         self._corpus = TextCorpus.load(corpus_path)
 
-    def sample(self, clean: Image.Image, index: int) -> GeneratedSample:
+    def sample(
+        self,
+        clean: Image.Image,
+        index: int,
+        *,
+        source: SourceInfo | None = None,
+        transform: Transform | None = None,
+    ) -> GeneratedSample:
+        if transform is not None and tuple(transform.target_size) != clean.size:
+            raise ValueError(
+                f"transform.target_size {transform.target_size} 与 clean 尺寸 {clean.size} 不一致"
+            )
         sample_seed = self._config.seed + index * 7919
         rng = random.Random(sample_seed)
         duration_ms = DurationSampler(self._config.durations, rng).sample()
@@ -126,6 +144,15 @@ class SampleSampler:
                 missing_chars=result.missing_chars,
                 pairing_ok=check.ok,
                 max_abs_diff_outside_mask=check.max_abs_diff_outside_mask,
+                source=source,
+                transform=transform,
+                build=BuildInfo(
+                    dataset_version=self._config.dataset_version,
+                    config_sha256=result.config_sha256,
+                    renderer_version=RENDERER_VERSION,
+                    ffmpeg_version=self._ffmpeg_version,
+                    seed=sample_seed,
+                ),
             )
             return GeneratedSample(
                 record=record,

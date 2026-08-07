@@ -9,7 +9,7 @@ from .fonts import (
     FontRegistry,
     FontResolution,
 )
-from .renderer import PillowRenderer, RenderResult
+from .renderer import RENDERER_VERSION, PillowRenderer, RenderResult
 
 __all__ = [
     "Center",
@@ -21,6 +21,7 @@ __all__ = [
     "FontResolution",
     "PillowRenderer",
     "RGBA",
+    "RENDERER_VERSION",
     "RenderConfig",
     "RenderResult",
     "RenderStyle",

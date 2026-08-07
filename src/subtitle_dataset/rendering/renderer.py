@@ -14,6 +14,8 @@ from .fonts import FontRegistry
 from .layer import render_line_layer
 from .layout import compose_lines, load_font, split_lines
 
+RENDERER_VERSION = "0.1.0"
+
 
 @dataclass(frozen=True)
 class RenderResult:

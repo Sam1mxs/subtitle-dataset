@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from tests.helpers import make_clean_image
 
+from subtitle_dataset.contracts import SourceInfo, Transform
 from subtitle_dataset.sampling import SampleSampler, SamplingConfig
 
 SAMPLING_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sampling" / "default.json"
@@ -72,3 +73,35 @@ def test_cli_generate_writes_files(config: SamplingConfig, tmp_path: Path) -> No
         assert (sample_dir / "mask.png").exists()
         record = json.loads((sample_dir / "sample.json").read_text(encoding="utf-8"))
         assert record["pairing_ok"]
+
+
+def test_sample_with_source_and_transform(config: SamplingConfig) -> None:
+    clean = make_clean_image()
+    source = SourceInfo(
+        platform="bilibili",
+        video_sha256="a" * 64,
+        native_frame_index=45,
+        pts=45000,
+        timestamp_ms=1500,
+        time_base={"num": 1, "den": 30000},
+        frame_rate={"avg_num": 30, "avg_den": 1, "r_num": 30, "r_den": 1, "is_vfr": False},
+    )
+    transform = Transform(crop_xywh=(0, 0, 360, 640), target_size=(360, 640))
+    sample = SampleSampler(config).sample(
+        clean,
+        0,
+        source=source,
+        transform=transform,
+    )
+    assert sample.record.source == source
+    assert sample.record.transform == transform
+    assert sample.record.build is not None
+    assert sample.record.build.dataset_version == "v1"
+    assert sample.record.build.seed == sample.record.sample_seed
+    assert sample.record.build.renderer_version
+
+
+def test_transform_size_mismatch_rejected(config: SamplingConfig) -> None:
+    transform = Transform(crop_xywh=(0, 0, 360, 640), target_size=(720, 1280))
+    with pytest.raises(ValueError, match="不一致"):
+        SampleSampler(config).sample(make_clean_image(), 0, transform=transform)

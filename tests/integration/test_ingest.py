@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 
@@ -86,3 +87,58 @@ def test_cli_extract_frames_and_generate_from_dir(video_dir: Path) -> None:
         == 0
     )
     assert len(list((generated / "samples").iterdir())) == 4
+
+
+def test_generate_with_frames_manifest_preserves_source(video_dir: Path) -> None:
+    from subtitle_dataset.cli import main
+
+    video = video_dir / "src.mp4"
+    make_synthetic_video(video)
+    outdir = video_dir / "frames_src"
+    assert (
+        main(
+            [
+                "extract-frames",
+                "--video",
+                str(video),
+                "--config",
+                str(INGEST_CONFIG),
+                "--outdir",
+                str(outdir),
+            ]
+        )
+        == 0
+    )
+    generated = video_dir / "generated_src"
+    assert (
+        main(
+            [
+                "generate",
+                "--clean",
+                str(outdir / "frames"),
+                "--frames-manifest",
+                str(outdir / "manifest.json"),
+                "--config",
+                str(SAMPLING_CONFIG),
+                "--outdir",
+                str(generated),
+                "--n",
+                "3",
+            ]
+        )
+        == 0
+    )
+    frames_manifest = json.loads((outdir / "manifest.json").read_text(encoding="utf-8"))
+    generated_manifest = json.loads((generated / "manifest.json").read_text(encoding="utf-8"))
+    frame_indices = {frame["native_frame_index"] for frame in frames_manifest["frames"]}
+    for sample in generated_manifest["samples"]:
+        source = sample["source"]
+        assert source is not None
+        assert source["video_sha256"] == frames_manifest["video_sha256"]
+        assert source["native_frame_index"] in frame_indices
+        assert source["platform"] == "unknown"
+        assert source["time_base"] == frames_manifest["probe"]["video"]["time_base"]
+        assert sample["transform"]["target_size"] == [1280, 720]
+        assert sample["build"]["ffmpeg_version"] == frames_manifest["ffmpeg_version"]
+        assert sample["build"]["seed"] == sample["sample_seed"]
+        assert sample["build"]["renderer_version"]

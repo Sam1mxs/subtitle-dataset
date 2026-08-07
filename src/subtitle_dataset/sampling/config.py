@@ -117,6 +117,7 @@ class SamplingConfig(BaseModel):
 
     dataset_version: str = "v1"
     seed: int = 0
+    source_platform: str = "unknown"
     max_attempts: int = Field(ge=1, default=20)
     inpaint_dilation_px: int = Field(ge=0, default=3)
     require_ml_training_fonts: bool = True

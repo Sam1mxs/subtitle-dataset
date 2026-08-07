@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import json
 import random
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
-from subtitle_dataset.contracts import FailureRecord, config_sha256
+from subtitle_dataset.contracts import (
+    FailureRecord,
+    FrameRate,
+    SourceInfo,
+    TimeBase,
+    Transform,
+    config_sha256,
+)
 from subtitle_dataset.media.config import IngestConfig
 from subtitle_dataset.media.crop import crop_and_resize
 from subtitle_dataset.media.decode import extract_frame
@@ -133,3 +142,35 @@ def run_ingest(
         encoding="utf-8",
     )
     return report
+
+
+def frame_sources_and_transforms(
+    manifest: Mapping[str, Any],
+    *,
+    platform: str,
+) -> tuple[list[SourceInfo], list[Transform]]:
+    """把 ingest manifest 的帧记录转成契约 SourceInfo/Transform（对齐 §12）。"""
+    video = manifest["probe"]["video"]
+    time_base = TimeBase.model_validate(video["time_base"])
+    frame_rate = FrameRate.model_validate(video["avg_frame_rate"])
+    sources: list[SourceInfo] = []
+    transforms: list[Transform] = []
+    for frame in manifest["frames"]:
+        sources.append(
+            SourceInfo(
+                platform=platform,
+                video_sha256=manifest["video_sha256"],
+                native_frame_index=frame["native_frame_index"],
+                pts=frame["pts"],
+                timestamp_ms=frame["timestamp_ms"],
+                time_base=time_base,
+                frame_rate=frame_rate,
+            )
+        )
+        transforms.append(
+            Transform(
+                crop_xywh=tuple(frame["crop_xywh"]),
+                target_size=tuple(frame["target_size"]),
+            )
+        )
+    return sources, transforms
