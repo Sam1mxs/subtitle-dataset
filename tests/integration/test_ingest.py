@@ -142,3 +142,83 @@ def test_generate_with_frames_manifest_preserves_source(video_dir: Path) -> None
         assert sample["build"]["ffmpeg_version"] == frames_manifest["ffmpeg_version"]
         assert sample["build"]["seed"] == sample["sample_seed"]
         assert sample["build"]["renderer_version"]
+
+
+def test_generate_with_split_map(video_dir: Path) -> None:
+    from subtitle_dataset.cli import main
+
+    video = video_dir / "split.mp4"
+    make_synthetic_video(video)
+    frames_out = video_dir / "frames_split"
+    assert (
+        main(
+            [
+                "extract-frames",
+                "--video",
+                str(video),
+                "--config",
+                str(INGEST_CONFIG),
+                "--outdir",
+                str(frames_out),
+            ]
+        )
+        == 0
+    )
+    dedup_out = video_dir / "dedup"
+    assert (
+        main(
+            [
+                "dedup",
+                "--manifests",
+                str(frames_out / "manifest.json"),
+                "--outdir",
+                str(dedup_out),
+            ]
+        )
+        == 0
+    )
+    split_out = video_dir / "splits"
+    split_config = REPO_ROOT / "configs" / "splits" / "default.json"
+    assert (
+        main(
+            [
+                "split",
+                "--clusters",
+                str(dedup_out / "clusters.json"),
+                "--config",
+                str(split_config),
+                "--outdir",
+                str(split_out),
+            ]
+        )
+        == 0
+    )
+    item_splits = json.loads((split_out / "item_splits.json").read_text(encoding="utf-8"))
+    generated = video_dir / "generated_split"
+    assert (
+        main(
+            [
+                "generate",
+                "--clean",
+                str(frames_out / "frames"),
+                "--frames-manifest",
+                str(frames_out / "manifest.json"),
+                "--split-map",
+                str(split_out / "item_splits.json"),
+                "--config",
+                str(SAMPLING_CONFIG),
+                "--outdir",
+                str(generated),
+                "--n",
+                "2",
+            ]
+        )
+        == 0
+    )
+    frames_manifest = json.loads((frames_out / "manifest.json").read_text(encoding="utf-8"))
+    generated_manifest = json.loads((generated / "manifest.json").read_text(encoding="utf-8"))
+    video_sha256 = frames_manifest["video_sha256"]
+    for index, sample in enumerate(generated_manifest["samples"]):
+        record = frames_manifest["frames"][index % 2]
+        expected = item_splits[f"frame:{video_sha256}:{record['uri']}"]
+        assert sample["split"] == expected

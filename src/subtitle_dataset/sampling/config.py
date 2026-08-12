@@ -9,6 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, model_validator
 
 from subtitle_dataset.contracts import UnitFloat
+from subtitle_dataset.filtering.policy import SampleTextPolicy
 from subtitle_dataset.rendering.config import RGBA, TextAlign
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -123,6 +124,7 @@ class SamplingConfig(BaseModel):
     require_ml_training_fonts: bool = True
     corpus_path: str = "assets/texts/sample_corpus.txt"
     single_line_prob: UnitFloat = 0.75
+    text_policy: SampleTextPolicy = Field(default_factory=SampleTextPolicy)
     durations: DurationDistribution
     style: StyleDistribution
     position: PositionDistribution = PositionDistribution()

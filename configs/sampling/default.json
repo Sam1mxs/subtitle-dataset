@@ -6,6 +6,11 @@
   "require_ml_training_fonts": true,
   "corpus_path": "assets/texts/sample_corpus.txt",
   "single_line_prob": 0.75,
+  "text_policy": {
+    "enabled": true,
+    "reject_roles": ["subtitle"],
+    "target_region_margin": 0.01
+  },
   "durations": {
     "buckets": [
       {"min_ms": 130, "max_ms": 270, "weight": 1.0},

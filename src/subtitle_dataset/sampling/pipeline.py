@@ -6,9 +6,16 @@ import random
 from dataclasses import dataclass
 
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from subtitle_dataset.contracts import BuildInfo, SourceInfo, Transform
+from subtitle_dataset.contracts import BuildInfo, SourceInfo, Split, Transform
+from subtitle_dataset.filtering import (
+    FilteringConfig,
+    HeuristicTextRegionDetector,
+    TextRegionDetector,
+    assign_geometric_roles,
+)
+from subtitle_dataset.filtering.policy import check_frame_text_policy
 from subtitle_dataset.qa import check_strict_pairing
 from subtitle_dataset.rendering import PillowRenderer
 from subtitle_dataset.rendering.config import RenderConfig, RenderStyle
@@ -47,6 +54,9 @@ class GeneratedSampleRecord(BaseModel):
     source: SourceInfo | None = None
     transform: Transform | None = None
     build: BuildInfo | None = None
+    text_policy_ok: bool | None = None
+    text_policy_reasons: list[str] = Field(default_factory=list)
+    split: Split | None = None
 
 
 @dataclass(frozen=True)
@@ -70,10 +80,13 @@ class SampleSampler:
         *,
         renderer: PillowRenderer | None = None,
         ffmpeg_version: str = "",
+        detector: TextRegionDetector | None = None,
     ) -> None:
         self._config = config
         self._renderer = renderer or PillowRenderer()
         self._ffmpeg_version = ffmpeg_version
+        self._filtering_config = FilteringConfig()
+        self._detector = detector or HeuristicTextRegionDetector(self._filtering_config)
         corpus_path = REPO_ROOT / config.corpus_path
         self._corpus = TextCorpus.load(corpus_path)
 
@@ -84,6 +97,7 @@ class SampleSampler:
         *,
         source: SourceInfo | None = None,
         transform: Transform | None = None,
+        split: Split | None = None,
     ) -> GeneratedSample:
         if transform is not None and tuple(transform.target_size) != clean.size:
             raise ValueError(
@@ -122,6 +136,27 @@ class SampleSampler:
                 raise RuntimeError(
                     f"样本 {index} 严格配对校验失败: max_abs_diff={check.max_abs_diff_outside_mask}"
                 )
+            if self._config.text_policy.enabled:
+                boxes = self._detector.detect(clean)
+                boxes = assign_geometric_roles(
+                    boxes,
+                    width=clean.width,
+                    height=clean.height,
+                    config=self._filtering_config,
+                )
+                target = _normalize_bbox(result.effect_bbox_xyxy, clean.size)
+                decision = check_frame_text_policy(
+                    boxes,
+                    target,
+                    self._config.text_policy,
+                )
+                if not decision.ok:
+                    continue
+                text_policy_ok = True
+                text_policy_reasons: list[str] = []
+            else:
+                text_policy_ok = None
+                text_policy_reasons = []
             _, y0, _, y1 = result.effect_bbox_xyxy
             center_y = (y0 + y1) / 2 / clean.height
             if not 0.60 <= center_y <= 0.90:
@@ -153,6 +188,9 @@ class SampleSampler:
                     ffmpeg_version=self._ffmpeg_version,
                     seed=sample_seed,
                 ),
+                text_policy_ok=text_policy_ok,
+                text_policy_reasons=text_policy_reasons,
+                split=split,
             )
             return GeneratedSample(
                 record=record,
@@ -164,3 +202,12 @@ class SampleSampler:
         raise SamplingExhaustedError(
             f"样本 {index} 在 {self._config.max_attempts} 次尝试内未生成合法布局"
         )
+
+
+def _normalize_bbox(
+    xyxy: tuple[int, int, int, int],
+    size: tuple[int, int],
+) -> tuple[float, float, float, float]:
+    width, height = size
+    x0, y0, x1, y1 = xyxy
+    return (x0 / width, y0 / height, x1 / width, y1 / height)

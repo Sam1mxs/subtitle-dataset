@@ -12,7 +12,7 @@ from typing import Any
 
 from PIL import Image
 
-from .contracts import Sample, SampleManifest, SourceInfo, Transform
+from .contracts import Sample, SampleManifest, SourceInfo, Split, Transform
 from .dedup import (
     ContentCluster,
     SplitAllocator,
@@ -36,7 +36,7 @@ from .qa.distribution import (
     build_sample_distribution,
 )
 from .rendering import PillowRenderer, RenderConfig
-from .sampling import SampleSampler, SamplingConfig
+from .sampling import SampleSampler, SamplingConfig, SamplingExhaustedError
 from .workflows import frame_sources_and_transforms, run_ingest
 
 
@@ -110,7 +110,15 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     frame_paths: list[Path] | None = None
     sources: list[SourceInfo] = []
     transforms: list[Transform] = []
+    frame_splits: list[Split] | None = None
     ffmpeg_version = ""
+    splits_by_item: dict[str, Split] | None = None
+    if args.split_map is not None:
+        if args.frames_manifest is None:
+            print("ERROR: --split-map 需要 --frames-manifest", file=sys.stderr)
+            return 2
+        raw_splits = _load_json(args.split_map)
+        splits_by_item = {item_id: Split(value) for item_id, value in raw_splits.items()}
     if args.clean.is_dir():
         frame_paths = sorted(args.clean.glob("*.png"))
         if not frame_paths:
@@ -118,13 +126,14 @@ def _cmd_generate(args: argparse.Namespace) -> int:
             return 2
         if args.frames_manifest is not None:
             manifest = _load_json(args.frames_manifest)
+            video_sha256 = manifest["video_sha256"]
             all_sources, all_transforms = frame_sources_and_transforms(
                 manifest,
                 platform=config.source_platform,
                 creator_hash=creator_hash,
             )
             by_name = {
-                Path(record["uri"]).name: (src, transform)
+                Path(record["uri"]).name: (record, src, transform)
                 for record, src, transform in zip(
                     manifest["frames"],
                     all_sources,
@@ -132,16 +141,29 @@ def _cmd_generate(args: argparse.Namespace) -> int:
                     strict=True,
                 )
             }
+            if splits_by_item is not None:
+                frame_splits = []
             for frame_path in frame_paths:
-                pair = by_name.get(frame_path.name)
-                if pair is None:
+                entry = by_name.get(frame_path.name)
+                if entry is None:
                     print(
                         f"ERROR: 帧 {frame_path.name} 不在 frames manifest 中",
                         file=sys.stderr,
                     )
                     return 2
-                sources.append(pair[0])
-                transforms.append(pair[1])
+                record, src, transform = entry
+                sources.append(src)
+                transforms.append(transform)
+                if frame_splits is not None and splits_by_item is not None:
+                    item_id = f"frame:{video_sha256}:{record['uri']}"
+                    split_value = splits_by_item.get(item_id)
+                    if split_value is None:
+                        print(
+                            f"ERROR: 条目 {item_id} 不在 split map 中",
+                            file=sys.stderr,
+                        )
+                        return 2
+                    frame_splits.append(split_value)
             ffmpeg_version = manifest.get("ffmpeg_version", "")
     elif args.frames_manifest is not None:
         print("ERROR: --frames-manifest 需要 --clean 为帧目录", file=sys.stderr)
@@ -152,12 +174,17 @@ def _cmd_generate(args: argparse.Namespace) -> int:
             clean = Image.open(frame_paths[index % len(frame_paths)]).convert("RGB")
         else:
             clean = Image.open(args.clean).convert("RGB")
-        sample = sampler.sample(
-            clean,
-            index,
-            source=sources[index % len(sources)] if sources else None,
-            transform=transforms[index % len(transforms)] if transforms else None,
-        )
+        try:
+            sample = sampler.sample(
+                clean,
+                index,
+                source=sources[index % len(sources)] if sources else None,
+                transform=transforms[index % len(transforms)] if transforms else None,
+                split=(frame_splits[index % len(frame_splits)] if frame_splits else None),
+            )
+        except SamplingExhaustedError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
         sample_dir = args.outdir / "samples" / f"{index:05d}"
         sample_dir.mkdir(parents=True, exist_ok=True)
         sample.rendered.save(sample_dir / "rendered.png")
@@ -325,6 +352,15 @@ def _cmd_split(args: argparse.Namespace) -> int:
         assignment.model_dump_json(indent=2),
         encoding="utf-8",
     )
+    item_splits = {
+        item.id: assignment.assignments[cluster.cluster_id].value
+        for cluster in clusters
+        for item in cluster.items
+    }
+    (args.outdir / "item_splits.json").write_text(
+        json.dumps(item_splits, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     for warning in assignment.warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     print(
@@ -361,6 +397,12 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help="extract-frames 的 manifest.json（把原生时间/来源写进样本）",
+    )
+    p_generate.add_argument(
+        "--split-map",
+        type=Path,
+        default=None,
+        help="split 输出的 item_splits.json（写入样本 split 字段）",
     )
     p_generate.add_argument("--source-id", default=None, help="来源登记表中的 source_id")
     p_generate.add_argument(

@@ -2,6 +2,7 @@
 
 from .config import FilteringConfig
 from .models import FrameDetection, PersistentBox, TextBox, TextRole, VideoSubtitleReport
+from .policy import SampleTextDecision, SampleTextPolicy, check_frame_text_policy
 from .text_regions import (
     HeuristicTextRegionDetector,
     TextRegionDetector,
@@ -15,11 +16,14 @@ __all__ = [
     "FrameDetection",
     "HeuristicTextRegionDetector",
     "PersistentBox",
+    "SampleTextDecision",
+    "SampleTextPolicy",
     "TextRegionDetector",
     "TextBox",
     "TextRole",
     "VideoSubtitleFilter",
     "VideoSubtitleReport",
     "assign_geometric_roles",
+    "check_frame_text_policy",
     "track_boxes",
 ]

@@ -49,7 +49,9 @@ subtitle-dataset split --clusters dedup/clusters.json --config configs/splits/de
 `generate` 是采样闭环：按时长分桶、文本语料（`assets/texts/sample_corpus.txt`）、
 样式分布和位置分布采样，渲染后校验边界与严格配对，失败自动重试；每个样本
 使用独立种子（`seed + index * 7919`），输出到 `out/samples/{index}/` 并在
-`out/manifest.json` 汇总。
+`out/manifest.json` 汇总。样本级文字过滤（§7 精筛）默认开启：clean 帧的字幕
+目标区域内检出原生字幕文字时拒绝并重试；`--split-map` 可把划分结果写入
+每个样本的 `split` 字段。
 
 `extract-frames` 是阶段三 pilot：ffprobe 探测原生帧率/time_base/色彩 → showinfo
 建立帧索引↔PTS↔毫秒时间轴 → scene 滤镜切分场景 → 每场景抽代表帧 → 保持几何比例的
@@ -70,7 +72,8 @@ subtitle-dataset split --clusters dedup/clusters.json --config configs/splits/de
 `dedup` 做 SHA-256 精确去重（视频级 + 帧级，输出内容簇）；`split` 在**内容簇**
 层面划分 train/val/test（簇不可拆分），按比例贪心分配、种子可复现，并尽量满足
 平台/作者/视频分组上限（不满足时记录警告）。感知哈希近重复聚类接口已提供
-（`dedup.hashing.DifferenceHash` + `build_near_clusters`），待真实视频池接入。
+（`dedup.hashing.DifferenceHash` + `build_near_clusters`），待真实视频池接入；
+`split` 同时输出 `item_splits.json`（条目 → split），供 `generate --split-map` 使用。
 
 ## 目录结构
 

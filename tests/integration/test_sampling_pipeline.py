@@ -8,8 +8,13 @@ from pathlib import Path
 import pytest
 from tests.helpers import make_clean_image
 
-from subtitle_dataset.contracts import SourceInfo, Transform
-from subtitle_dataset.sampling import SampleSampler, SamplingConfig
+from subtitle_dataset.contracts import SourceInfo, Split, Transform
+from subtitle_dataset.sampling import (
+    RangeF,
+    SampleSampler,
+    SamplingConfig,
+    SamplingExhaustedError,
+)
 
 SAMPLING_CONFIG = Path(__file__).resolve().parents[2] / "configs" / "sampling" / "default.json"
 
@@ -105,3 +110,37 @@ def test_transform_size_mismatch_rejected(config: SamplingConfig) -> None:
     transform = Transform(crop_xywh=(0, 0, 360, 640), target_size=(720, 1280))
     with pytest.raises(ValueError, match="不一致"):
         SampleSampler(config).sample(make_clean_image(), 0, transform=transform)
+
+
+def test_native_subtitle_in_target_region_rejected(config: SamplingConfig) -> None:
+    from PIL import Image, ImageDraw, ImageFont
+    from tests.helpers import NOTO_FONT
+
+    image = Image.new("RGB", (360, 640), (40, 44, 56))
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype(str(NOTO_FONT), 28)
+    draw.text(
+        (180, 550),
+        "原生字幕",
+        font=font,
+        fill=(255, 255, 255),
+        anchor="mm",
+        stroke_width=2,
+        stroke_fill=(0, 0, 0),
+    )
+    strict = config.model_copy(deep=True)
+    strict.max_attempts = 3
+    strict.position.center_y_range = RangeF(min=0.85, max=0.85)
+    with pytest.raises(SamplingExhaustedError):
+        SampleSampler(strict).sample(image, 0)
+
+
+def test_text_policy_ok_recorded(config: SamplingConfig) -> None:
+    sample = SampleSampler(config).sample(make_clean_image(), 0)
+    assert sample.record.text_policy_ok is True
+    assert sample.record.text_policy_reasons == []
+
+
+def test_sample_split_field(config: SamplingConfig) -> None:
+    sample = SampleSampler(config).sample(make_clean_image(), 0, split=Split.TRAIN)
+    assert sample.record.split == Split.TRAIN
