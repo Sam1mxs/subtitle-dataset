@@ -16,7 +16,7 @@ from subtitle_dataset.ingest import (
 )
 
 
-def _registry(source_id: str = "test-src", **overrides: Any) -> SourceRegistry:
+def _record_dict(source_id: str, **overrides: Any) -> dict[str, Any]:
     record: dict[str, Any] = {
         "source_id": source_id,
         "platform": "bilibili",
@@ -30,7 +30,19 @@ def _registry(source_id: str = "test-src", **overrides: Any) -> SourceRegistry:
         "authorization_expire_at": "2026-12-31",
     }
     record.update(overrides)
-    return SourceRegistry.model_validate({"version": "1", "sources": [record]})
+    return record
+
+
+def _registry(source_id: str = "test-src", **overrides: Any) -> SourceRegistry:
+    return SourceRegistry.model_validate(
+        {"version": "1", "sources": [_record_dict(source_id, **overrides)]}
+    )
+
+
+def _multi_registry() -> SourceRegistry:
+    return SourceRegistry.model_validate(
+        {"version": "1", "sources": [_record_dict("a-src"), _record_dict("b-src")]}
+    )
 
 
 class FakeAdapter(SourceAdapter):
@@ -155,3 +167,60 @@ def test_delete_item(tmp_path: Path) -> None:
     state = json.loads((tmp_path / "collected.json").read_text(encoding="utf-8"))
     assert len(state["items"]) == 2
     assert not manager.delete_item("test-src", "missing")
+
+
+def test_collect_many_concurrent(tmp_path: Path) -> None:
+    manager = _manager(
+        tmp_path,
+        registry=_multi_registry(),
+        config=CollectConfig(rate_limit_ms=0, max_workers=2),
+    )
+    reports = manager.collect_many(["a-src", "b-src"], lambda _sid: FakeAdapter())
+    assert [report.downloaded for report in reports] == [3, 3]
+    state = json.loads((tmp_path / "collected.json").read_text(encoding="utf-8"))
+    assert len(state["items"]) == 6
+
+
+def test_collect_many_idempotent(tmp_path: Path) -> None:
+    manager = _manager(
+        tmp_path,
+        registry=_multi_registry(),
+        config=CollectConfig(rate_limit_ms=0, max_workers=2),
+    )
+    adapters = [FakeAdapter(), FakeAdapter()]
+    first = manager.collect_many(["a-src", "b-src"], lambda sid: adapters[0])
+    second = manager.collect_many(["a-src", "b-src"], lambda sid: adapters[1])
+    assert [r.downloaded for r in first] == [3, 3]
+    assert [r.skipped_duplicates for r in second] == [3, 3]
+    assert len(adapters[0].download_calls) == 6  # 第一次两个来源共用同一实例
+    assert adapters[1].download_calls == []  # 第二次全部跳过
+
+
+def test_collect_many_global_rate_limit(tmp_path: Path) -> None:
+    manager = _manager(
+        tmp_path,
+        registry=_multi_registry(),
+        config=CollectConfig(
+            rate_limit_ms=0,
+            global_rate_limit_ms=100,
+            max_workers=2,
+        ),
+    )
+    start = time.monotonic()
+    reports = manager.collect_many(["a-src", "b-src"], lambda _sid: FakeAdapter())
+    elapsed = time.monotonic() - start
+    assert sum(r.downloaded for r in reports) == 6
+    assert elapsed >= 0.4  # 6 个请求全局间隔 100ms
+
+
+def test_collect_many_per_source_rate_limit(tmp_path: Path) -> None:
+    manager = _manager(
+        tmp_path,
+        registry=_multi_registry(),
+        config=CollectConfig(rate_limit_ms=120, max_workers=2),
+    )
+    start = time.monotonic()
+    reports = manager.collect_many(["a-src", "b-src"], lambda _sid: FakeAdapter())
+    elapsed = time.monotonic() - start
+    assert sum(r.downloaded for r in reports) == 6
+    assert elapsed >= 0.2  # 每来源 3 个请求 → 2 个间隔 × 120ms

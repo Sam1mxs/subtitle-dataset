@@ -248,6 +248,8 @@ def _cmd_collect(args: argparse.Namespace) -> int:
     )
     if args.limit is not None:
         config.max_items = args.limit
+    if args.concurrency is not None:
+        config.max_workers = args.concurrency
     adapter_name = args.adapter or config.adapter
     adapter_cls = ADAPTERS.get(adapter_name)
     if adapter_cls is None:
@@ -262,12 +264,13 @@ def _cmd_collect(args: argparse.Namespace) -> int:
         config=config,
         outdir=args.outdir,
     )
-    report = manager.collect(adapter, args.source_id)
-    print(
-        f"来源 {report.source_id}：发现 {report.discovered}，下载 {report.downloaded}，"
-        f"跳过重复 {report.skipped_duplicates}，失败 {len(report.failures)}"
-    )
-    return 0 if report.authorized and not report.failures else 1
+    reports = manager.collect_many(args.source_id, lambda _source_id: adapter)
+    for report in reports:
+        print(
+            f"来源 {report.source_id}：发现 {report.discovered}，下载 {report.downloaded}，"
+            f"跳过重复 {report.skipped_duplicates}，失败 {len(report.failures)}"
+        )
+    return 0 if all(r.authorized and not r.failures for r in reports) else 1
 
 
 def _cmd_collect_delete(args: argparse.Namespace) -> int:
@@ -348,13 +351,14 @@ def main(argv: list[str] | None = None) -> int:
     p_src_check.add_argument("--at", type=date.fromisoformat, default=date.today())
 
     p_collect = sub.add_parser("collect", help="按来源下载视频（授权门禁 + 限速 + 幂等）")
-    p_collect.add_argument("--source-id", required=True)
+    p_collect.add_argument("--source-id", action="append", required=True, help="可重复指定多个来源")
     p_collect.add_argument("--adapter", default=None, help="适配器名（默认 local-http）")
     p_collect.add_argument("--base-url", default=None, help="适配器参数（local-http 的 base URL）")
     p_collect.add_argument("--outdir", type=Path, required=True)
     p_collect.add_argument("--registry", type=Path, default=None)
     p_collect.add_argument("--config", type=Path, default=None, help="CollectConfig JSON 路径")
     p_collect.add_argument("--limit", type=int, default=None, help="本次最多下载条数")
+    p_collect.add_argument("--concurrency", type=int, default=None, help="并发来源数")
 
     p_delete = sub.add_parser("collect-delete", help="删除已下载条目及其状态")
     p_delete.add_argument("--source-id", required=True)

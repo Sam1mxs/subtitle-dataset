@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -14,6 +17,7 @@ from subtitle_dataset.contracts import FailureRecord
 from subtitle_dataset.media.probe import sha256_file
 
 from .adapters.base import ItemRef, SourceAdapter
+from .ratelimit import RateLimiter
 from .sources import SourceRegistry, check_authorization
 
 
@@ -56,9 +60,11 @@ class CollectionReport(BaseModel):
 
 class CollectConfig(BaseModel):
     rate_limit_ms: int = Field(ge=0, default=500)
+    global_rate_limit_ms: int = Field(ge=0, default=0)
     max_retries: int = Field(ge=0, default=3)
     backoff_base_seconds: float = Field(ge=0.0, default=1.0)
     max_items: int | None = Field(default=None, ge=1)
+    max_workers: int = Field(ge=1, default=1)
     adapter: str = "local-http"
     adapter_options: dict[str, Any] = Field(default_factory=dict)
 
@@ -79,8 +85,28 @@ class DownloadManager:
         self._state_path = outdir / "collected.json"
         self._failures_path = outdir / "failures.json"
         self._state = CollectionState.load(self._state_path)
+        self._state_lock = threading.Lock()
+        self._paused_lock = threading.Lock()
         self._paused: set[str] = set()
-        self._last_request_at: dict[str, float] = {}
+        self._rate_limiter = RateLimiter(
+            per_source_ms=config.rate_limit_ms,
+            global_ms=config.global_rate_limit_ms,
+        )
+
+    def collect_many(
+        self,
+        source_ids: list[str],
+        adapter_factory: Callable[[str], SourceAdapter],
+    ) -> list[CollectionReport]:
+        """并发收集多个来源；来源级与全局限速同时生效。"""
+        if self._config.max_workers <= 1 or len(source_ids) <= 1:
+            return [self.collect(adapter_factory(source_id), source_id) for source_id in source_ids]
+        with ThreadPoolExecutor(max_workers=self._config.max_workers) as executor:
+            futures = [
+                executor.submit(self.collect, adapter_factory(source_id), source_id)
+                for source_id in source_ids
+            ]
+            return [future.result() for future in futures]
 
     def collect(self, adapter: SourceAdapter, source_id: str) -> CollectionReport:
         failures: list[FailureRecord] = []
@@ -108,7 +134,9 @@ class DownloadManager:
                 )
             )
             return self._report(source_id, authorized=False, failures=failures)
-        if source_id in self._paused:
+        with self._paused_lock:
+            paused = source_id in self._paused
+        if paused:
             failures.append(
                 FailureRecord(
                     stage="paused",
@@ -171,10 +199,12 @@ class DownloadManager:
         )
 
     def pause(self, source_id: str) -> None:
-        self._paused.add(source_id)
+        with self._paused_lock:
+            self._paused.add(source_id)
 
     def resume(self, source_id: str) -> None:
-        self._paused.discard(source_id)
+        with self._paused_lock:
+            self._paused.discard(source_id)
 
     def delete_item(self, source_id: str, item_id: str) -> bool:
         """删除已下载条目及其状态（§5.3 删除请求）。"""
@@ -211,13 +241,7 @@ class DownloadManager:
         raise last_error
 
     def _throttle(self, source_id: str) -> None:
-        interval = self._config.rate_limit_ms / 1000.0
-        last = self._last_request_at.get(source_id)
-        if last is not None:
-            wait = interval - (time.monotonic() - last)
-            if wait > 0:
-                time.sleep(wait)
-        self._last_request_at[source_id] = time.monotonic()
+        self._rate_limiter.wait(source_id)
 
     def _destination(self, source_id: str, item: ItemRef) -> Path:
         suffix = Path(item.url.split("?", 1)[0]).suffix or ".bin"
@@ -250,19 +274,21 @@ class DownloadManager:
         )
 
     def _save_state(self) -> None:
-        self._outdir.mkdir(parents=True, exist_ok=True)
-        self._state_path.write_text(
-            self._state.model_dump_json(indent=2),
-            encoding="utf-8",
-        )
+        with self._state_lock:
+            self._outdir.mkdir(parents=True, exist_ok=True)
+            self._state_path.write_text(
+                self._state.model_dump_json(indent=2),
+                encoding="utf-8",
+            )
 
     def _write_failures(self, failures: list[FailureRecord]) -> None:
-        self._outdir.mkdir(parents=True, exist_ok=True)
-        self._failures_path.write_text(
-            json.dumps(
-                [failure.model_dump(mode="json") for failure in failures],
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        with self._state_lock:
+            self._outdir.mkdir(parents=True, exist_ok=True)
+            self._failures_path.write_text(
+                json.dumps(
+                    [failure.model_dump(mode="json") for failure in failures],
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )

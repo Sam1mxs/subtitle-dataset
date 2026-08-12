@@ -1,8 +1,10 @@
 {
   "rate_limit_ms": 500,
+  "global_rate_limit_ms": 0,
   "max_retries": 3,
   "backoff_base_seconds": 1.0,
   "max_items": null,
+  "max_workers": 1,
   "adapter": "local-http",
   "adapter_options": {}
 }

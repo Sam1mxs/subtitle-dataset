@@ -8,6 +8,7 @@ from .collect import (
     CollectionState,
     DownloadManager,
 )
+from .ratelimit import RateLimiter
 from .sources import (
     DEFAULT_REGISTRY_PATH,
     LicenseStatus,
@@ -29,6 +30,7 @@ __all__ = [
     "ItemRef",
     "LicenseStatus",
     "LocalHttpAdapter",
+    "RateLimiter",
     "SourceAdapter",
     "SourceAuthorization",
     "SourceRecord",

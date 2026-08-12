@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import hashlib
 import io
 import json
 import shutil
@@ -16,6 +17,25 @@ from tests.helpers import make_synthetic_video
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COLLECT_CONFIG = REPO_ROOT / "configs" / "ingest" / "collect.json"
+
+
+class RangeHTTPRequestHandler(SimpleHTTPRequestHandler):
+    """支持 Range 请求的最小 HTTP 服务（用于断点续传测试）。"""
+
+    def do_GET(self) -> None:
+        range_header = self.headers.get("Range")
+        path = Path(self.translate_path(self.path))
+        if range_header is None or not path.is_file():
+            return super().do_GET()
+        size = path.stat().st_size
+        start = int(range_header.removeprefix("bytes=").rstrip("-"))
+        self.send_response(206)
+        self.send_header("Content-Range", f"bytes {start}-{size - 1}/{size}")
+        self.send_header("Content-Length", str(size - start))
+        self.end_headers()
+        with path.open("rb") as fh:
+            fh.seek(start)
+            shutil.copyfileobj(fh, self.wfile)
 
 
 def _authorized_registry(tmp_path: Path, source_id: str = "test-src") -> Path:
@@ -141,6 +161,68 @@ def test_collect_end_to_end(tmp_path: Path) -> None:
             == 0
         )
         assert not downloaded.exists()
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_collect_resumes_partial_download(tmp_path: Path) -> None:
+    from subtitle_dataset.cli import main
+
+    if shutil.which("ffmpeg") is None:
+        return
+    server_dir = tmp_path / "server"
+    (server_dir / "videos").mkdir(parents=True)
+    video = server_dir / "videos" / "v001.mp4"
+    make_synthetic_video(video)
+    (server_dir / "manifest.json").write_text(
+        json.dumps(
+            {"items": [{"item_id": "v001", "title": "测试视频", "url": "videos/v001.mp4"}]},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    handler = functools.partial(RangeHTTPRequestHandler, directory=str(server_dir))
+    try:
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    except OSError as exc:
+        pytest.skip(f"环境不允许本地 socket: {exc}")
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        registry = _authorized_registry(tmp_path)
+        outdir = tmp_path / "out"
+        raw = outdir / "raw" / "test-src"
+        raw.mkdir(parents=True)
+        part = raw / "v001.mp4.part"
+        with video.open("rb") as fh:
+            part.write_bytes(fh.read(1000))
+        with contextlib.redirect_stdout(io.StringIO()):
+            exit_code = main(
+                [
+                    "collect",
+                    "--source-id",
+                    "test-src",
+                    "--adapter",
+                    "local-http",
+                    "--base-url",
+                    f"http://127.0.0.1:{httpd.server_address[1]}",
+                    "--outdir",
+                    str(outdir),
+                    "--registry",
+                    str(registry),
+                    "--config",
+                    str(COLLECT_CONFIG),
+                ]
+            )
+        assert exit_code == 0
+        final = raw / "v001.mp4"
+        assert final.exists()
+        assert not part.exists()
+        assert (
+            hashlib.sha256(final.read_bytes()).hexdigest()
+            == hashlib.sha256(video.read_bytes()).hexdigest()
+        )
     finally:
         httpd.shutdown()
         httpd.server_close()
