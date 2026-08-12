@@ -13,6 +13,13 @@ from typing import Any
 from PIL import Image
 
 from .contracts import Sample, SampleManifest, SourceInfo, Transform
+from .dedup import (
+    ContentCluster,
+    SplitAllocator,
+    SplitConfig,
+    build_exact_clusters,
+    items_from_ingest_manifest,
+)
 from .filtering import FilteringConfig, VideoSubtitleFilter
 from .ingest import (
     ADAPTERS,
@@ -284,6 +291,51 @@ def _cmd_collect_delete(args: argparse.Namespace) -> int:
     return 0 if deleted else 1
 
 
+def _cmd_dedup(args: argparse.Namespace) -> int:
+    items = []
+    for manifest_path in args.manifests:
+        items.extend(items_from_ingest_manifest(_load_json(manifest_path)))
+    clusters = build_exact_clusters(items)
+    args.outdir.mkdir(parents=True, exist_ok=True)
+    (args.outdir / "clusters.json").write_text(
+        json.dumps(
+            [cluster.model_dump(mode="json") for cluster in clusters],
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    unique_items = len({item.id for cluster in clusters for item in cluster.items})
+    duplicate_count = len(items) - unique_items
+    print(
+        f"OK: {len(items)} 个条目 → {len(clusters)} 个精确去重簇，"
+        f"重复条目 {duplicate_count} → {args.outdir / 'clusters.json'}"
+    )
+    return 0
+
+
+def _cmd_split(args: argparse.Namespace) -> int:
+    with args.clusters.open("r", encoding="utf-8") as fh:
+        raw_clusters = json.load(fh)
+    clusters = [ContentCluster.model_validate(cluster) for cluster in raw_clusters]
+    config = SplitConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
+    assignment = SplitAllocator(config).allocate(clusters)
+    args.outdir.mkdir(parents=True, exist_ok=True)
+    (args.outdir / "assignment.json").write_text(
+        assignment.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+    for warning in assignment.warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
+    print(
+        "OK: 簇数 "
+        + ", ".join(f"{split}={count}" for split, count in assignment.cluster_counts.items())
+        + "；条目数 "
+        + ", ".join(f"{split}={count}" for split, count in assignment.item_counts.items())
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="subtitle-dataset", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -366,6 +418,17 @@ def main(argv: list[str] | None = None) -> int:
     p_delete.add_argument("--outdir", type=Path, required=True)
     p_delete.add_argument("--registry", type=Path, default=None)
 
+    p_dedup = sub.add_parser("dedup", help="对 ingest manifest 做 SHA-256 精确去重")
+    p_dedup.add_argument(
+        "--manifests", action="append", type=Path, required=True, help="可重复指定"
+    )
+    p_dedup.add_argument("--outdir", type=Path, required=True)
+
+    p_split = sub.add_parser("split", help="簇级 train/val/test 划分（簇不可拆分）")
+    p_split.add_argument("--clusters", type=Path, required=True, help="dedup 输出的 clusters.json")
+    p_split.add_argument("--config", type=Path, required=True, help="SplitConfig JSON 路径")
+    p_split.add_argument("--outdir", type=Path, required=True)
+
     args = parser.parse_args(argv)
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
         "validate-sample": _cmd_validate_sample,
@@ -378,6 +441,8 @@ def main(argv: list[str] | None = None) -> int:
         "distribution-report": _cmd_distribution_report,
         "collect": _cmd_collect,
         "collect-delete": _cmd_collect_delete,
+        "dedup": _cmd_dedup,
+        "split": _cmd_split,
     }
     if args.command == "source-registry":
         source_handlers: dict[str, Callable[[argparse.Namespace], int]] = {

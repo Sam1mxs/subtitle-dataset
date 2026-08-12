@@ -1,0 +1,13 @@
+{
+  "ratios": {
+    "train": 0.8,
+    "val": 0.1,
+    "test": 0.1
+  },
+  "seed": 42,
+  "group_limits": {
+    "platform": 0.6,
+    "creator": 0.3,
+    "video": 0.2
+  }
+}

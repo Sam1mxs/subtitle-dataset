@@ -38,6 +38,8 @@ subtitle-dataset source-registry validate
 subtitle-dataset source-registry check --source-id bilibili-demo
 subtitle-dataset collect --source-id test-src --source-id test-src-2 --adapter local-http --base-url http://127.0.0.1:8000 --outdir raw/ --registry configs/sources/registry.json --concurrency 2
 subtitle-dataset collect-delete --source-id test-src --item-id v001 --outdir raw/
+subtitle-dataset dedup --manifests frames/video-a/manifest.json --manifests frames/video-b/manifest.json --outdir dedup/
+subtitle-dataset split --clusters dedup/clusters.json --config configs/splits/default.json --outdir splits/
 ```
 
 `render` 输出 `rendered.png`（合成字幕图）、`alpha.png`（alpha mask）、
@@ -64,6 +66,11 @@ subtitle-dataset collect-delete --source-id test-src --item-id v001 --outdir raw
 多来源，`--concurrency` 控制并发数。`collect-delete` 删除条目及其状态。
 当前内置 `local-http` 适配器（本地目录 + manifest.json），真实平台适配器
 待授权来源接入后补充。
+
+`dedup` 做 SHA-256 精确去重（视频级 + 帧级，输出内容簇）；`split` 在**内容簇**
+层面划分 train/val/test（簇不可拆分），按比例贪心分配、种子可复现，并尽量满足
+平台/作者/视频分组上限（不满足时记录警告）。感知哈希近重复聚类接口已提供
+（`dedup.hashing.DifferenceHash` + `build_near_clusters`），待真实视频池接入。
 
 ## 目录结构
 
