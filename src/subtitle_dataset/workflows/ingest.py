@@ -148,6 +148,7 @@ def frame_sources_and_transforms(
     manifest: Mapping[str, Any],
     *,
     platform: str,
+    creator_hash: str | None = None,
 ) -> tuple[list[SourceInfo], list[Transform]]:
     """把 ingest manifest 的帧记录转成契约 SourceInfo/Transform（对齐 §12）。"""
     video = manifest["probe"]["video"]
@@ -160,6 +161,7 @@ def frame_sources_and_transforms(
             SourceInfo(
                 platform=platform,
                 video_sha256=manifest["video_sha256"],
+                creator_hash=creator_hash,
                 native_frame_index=frame["native_frame_index"],
                 pts=frame["pts"],
                 timestamp_ms=frame["timestamp_ms"],

@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,11 @@ from PIL import Image
 
 from .contracts import Sample, SampleManifest, SourceInfo, Transform
 from .filtering import FilteringConfig, VideoSubtitleFilter
+from .ingest import (
+    DEFAULT_REGISTRY_PATH,
+    SourceRegistry,
+    check_authorization,
+)
 from .media import IngestConfig, probe_video
 from .qa.distribution import (
     DistributionReportConfig,
@@ -72,6 +78,23 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 def _cmd_generate(args: argparse.Namespace) -> int:
     config = SamplingConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
+    creator_hash: str | None = None
+    if args.source_id is not None:
+        registry = SourceRegistry.load(args.registry or DEFAULT_REGISTRY_PATH)
+        try:
+            source = registry.get(args.source_id)
+        except KeyError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        authorization = check_authorization(source, date.today())
+        if not authorization.authorized:
+            print(
+                f"ERROR: 来源 {args.source_id} 未通过授权检查：{'；'.join(authorization.reasons)}",
+                file=sys.stderr,
+            )
+            return 2
+        config.source_platform = source.platform
+        creator_hash = source.creator_id_or_hash
     args.outdir.mkdir(parents=True, exist_ok=True)
     records = []
     frame_paths: list[Path] | None = None
@@ -88,6 +111,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
             all_sources, all_transforms = frame_sources_and_transforms(
                 manifest,
                 platform=config.source_platform,
+                creator_hash=creator_hash,
             )
             by_name = {
                 Path(record["uri"]).name: (src, transform)
@@ -191,6 +215,28 @@ def _cmd_distribution_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_source_registry_validate(args: argparse.Namespace) -> int:
+    registry = SourceRegistry.load(args.path)
+    errors = registry.validate_registry()
+    if errors:
+        for error in errors:
+            print(f"ERROR: {error}", file=sys.stderr)
+        return 2
+    print(f"OK: {len(registry.sources)} 个来源登记有效")
+    return 0
+
+
+def _cmd_source_registry_check(args: argparse.Namespace) -> int:
+    try:
+        source = SourceRegistry.load(args.path).get(args.source_id)
+    except KeyError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    result = check_authorization(source, args.at)
+    print(result.model_dump_json(indent=2))
+    return 0 if result.authorized else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="subtitle-dataset", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -217,6 +263,13 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="extract-frames 的 manifest.json（把原生时间/来源写进样本）",
     )
+    p_generate.add_argument("--source-id", default=None, help="来源登记表中的 source_id")
+    p_generate.add_argument(
+        "--registry",
+        type=Path,
+        default=None,
+        help="来源登记表路径（默认 configs/sources/registry.json）",
+    )
 
     p_probe = sub.add_parser("probe", help="探测视频元数据（ffprobe JSON）")
     p_probe.add_argument("video", type=Path, help="视频文件路径")
@@ -241,6 +294,15 @@ def main(argv: list[str] | None = None) -> int:
         "--config", type=Path, required=True, help="DistributionReportConfig JSON 路径"
     )
 
+    p_source = sub.add_parser("source-registry", help="来源登记表：校验与授权检查")
+    p_source_sub = p_source.add_subparsers(dest="src_command", required=True)
+    p_src_validate = p_source_sub.add_parser("validate", help="校验登记表")
+    p_src_validate.add_argument("--path", type=Path, default=DEFAULT_REGISTRY_PATH)
+    p_src_check = p_source_sub.add_parser("check", help="检查来源授权")
+    p_src_check.add_argument("--path", type=Path, default=DEFAULT_REGISTRY_PATH)
+    p_src_check.add_argument("--source-id", required=True)
+    p_src_check.add_argument("--at", type=date.fromisoformat, default=date.today())
+
     args = parser.parse_args(argv)
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
         "validate-sample": _cmd_validate_sample,
@@ -252,7 +314,14 @@ def main(argv: list[str] | None = None) -> int:
         "detect-subtitles": _cmd_detect_subtitles,
         "distribution-report": _cmd_distribution_report,
     }
-    handler = handlers[args.command]
+    if args.command == "source-registry":
+        source_handlers: dict[str, Callable[[argparse.Namespace], int]] = {
+            "validate": _cmd_source_registry_validate,
+            "check": _cmd_source_registry_check,
+        }
+        handler = source_handlers[args.src_command]
+    else:
+        handler = handlers[args.command]
     try:
         return handler(args)
     except (ValueError, OSError) as exc:

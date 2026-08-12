@@ -33,6 +33,9 @@ subtitle-dataset render --clean clean.png --config configs/styles/default.json -
 subtitle-dataset generate --clean clean.png --config configs/sampling/default.json --outdir out/ --n 20
 subtitle-dataset probe video.mp4
 subtitle-dataset extract-frames --video video.mp4 --config configs/ingest/default.json --outdir frames/
+subtitle-dataset detect-subtitles --video video.mp4 --config configs/filtering/default.json
+subtitle-dataset source-registry validate
+subtitle-dataset source-registry check --source-id bilibili-demo
 ```
 
 `render` 输出 `rendered.png`（合成字幕图）、`alpha.png`（alpha mask）、
@@ -48,6 +51,10 @@ subtitle-dataset extract-frames --video video.mp4 --config configs/ingest/defaul
 建立帧索引↔PTS↔毫秒时间轴 → scene 滤镜切分场景 → 每场景抽代表帧 → 保持几何比例的
 居中裁剪，输出帧文件与 `manifest.json`（含每个帧的原生 PTS、裁剪信息、图像哈希）。
 抽出的帧目录可以直接作为 `generate --clean` 的输入，把真实帧接进采样闭环。
+
+`source-registry` 管理来源登记表（§4）：`validate` 校验字段一致性，
+`check` 检查来源在当前日期是否通过授权；`generate --source-id` 在生成前
+强制执行授权门禁，未通过直接拒绝。
 
 ## 目录结构
 

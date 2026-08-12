@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "sources": [
+    {
+      "source_id": "bilibili-demo",
+      "platform": "bilibili",
+      "source_url_or_hash": "https://www.bilibili.com/（示例占位，需替换为真实来源）",
+      "creator_id_or_hash": null,
+      "license_status": "unknown",
+      "allowed_to_download": false,
+      "allowed_for_derivative_work": false,
+      "allowed_for_ml_training": false,
+      "allowed_to_redistribute": false,
+      "authorization_reference": null,
+      "authorization_start_at": null,
+      "authorization_expire_at": null,
+      "crawled_at": null
+    }
+  ]
+}
