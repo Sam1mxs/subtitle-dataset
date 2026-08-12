@@ -1,0 +1,8 @@
+{
+  "rate_limit_ms": 500,
+  "max_retries": 3,
+  "backoff_base_seconds": 1.0,
+  "max_items": null,
+  "adapter": "local-http",
+  "adapter_options": {}
+}

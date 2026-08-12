@@ -36,6 +36,8 @@ subtitle-dataset extract-frames --video video.mp4 --config configs/ingest/defaul
 subtitle-dataset detect-subtitles --video video.mp4 --config configs/filtering/default.json
 subtitle-dataset source-registry validate
 subtitle-dataset source-registry check --source-id bilibili-demo
+subtitle-dataset collect --source-id test-src --adapter local-http --base-url http://127.0.0.1:8000 --outdir raw/ --registry configs/sources/registry.json
+subtitle-dataset collect-delete --source-id test-src --item-id v001 --outdir raw/
 ```
 
 `render` 输出 `rendered.png`（合成字幕图）、`alpha.png`（alpha mask）、
@@ -55,6 +57,11 @@ subtitle-dataset source-registry check --source-id bilibili-demo
 `source-registry` 管理来源登记表（§4）：`validate` 校验字段一致性，
 `check` 检查来源在当前日期是否通过授权；`generate --source-id` 在生成前
 强制执行授权门禁，未通过直接拒绝。
+
+`collect` 是采集框架（§5）：下载前检查来源授权，支持来源级限速、指数退避
+重试、断点安全写入（.part 原子替换）与幂等（`collected.json` 状态，重复执行
+不重复下载）；`collect-delete` 删除条目及其状态。当前内置 `local-http`
+适配器（本地目录 + manifest.json），真实平台适配器待授权来源接入后补充。
 
 ## 目录结构
 

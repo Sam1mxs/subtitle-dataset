@@ -15,7 +15,10 @@ from PIL import Image
 from .contracts import Sample, SampleManifest, SourceInfo, Transform
 from .filtering import FilteringConfig, VideoSubtitleFilter
 from .ingest import (
+    ADAPTERS,
     DEFAULT_REGISTRY_PATH,
+    CollectConfig,
+    DownloadManager,
     SourceRegistry,
     check_authorization,
 )
@@ -237,6 +240,47 @@ def _cmd_source_registry_check(args: argparse.Namespace) -> int:
     return 0 if result.authorized else 1
 
 
+def _cmd_collect(args: argparse.Namespace) -> int:
+    config = (
+        CollectConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
+        if args.config is not None
+        else CollectConfig()
+    )
+    if args.limit is not None:
+        config.max_items = args.limit
+    adapter_name = args.adapter or config.adapter
+    adapter_cls = ADAPTERS.get(adapter_name)
+    if adapter_cls is None:
+        print(f"ERROR: 未知适配器 {adapter_name}", file=sys.stderr)
+        return 2
+    options = dict(config.adapter_options)
+    if args.base_url is not None:
+        options["base_url"] = args.base_url
+    adapter = adapter_cls(**options)
+    manager = DownloadManager(
+        registry=SourceRegistry.load(args.registry or DEFAULT_REGISTRY_PATH),
+        config=config,
+        outdir=args.outdir,
+    )
+    report = manager.collect(adapter, args.source_id)
+    print(
+        f"来源 {report.source_id}：发现 {report.discovered}，下载 {report.downloaded}，"
+        f"跳过重复 {report.skipped_duplicates}，失败 {len(report.failures)}"
+    )
+    return 0 if report.authorized and not report.failures else 1
+
+
+def _cmd_collect_delete(args: argparse.Namespace) -> int:
+    manager = DownloadManager(
+        registry=SourceRegistry.load(args.registry or DEFAULT_REGISTRY_PATH),
+        config=CollectConfig(),
+        outdir=args.outdir,
+    )
+    deleted = manager.delete_item(args.source_id, args.item_id)
+    print(f"OK: 已删除 {args.source_id}/{args.item_id}" if deleted else "条目不存在")
+    return 0 if deleted else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="subtitle-dataset", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -303,6 +347,21 @@ def main(argv: list[str] | None = None) -> int:
     p_src_check.add_argument("--source-id", required=True)
     p_src_check.add_argument("--at", type=date.fromisoformat, default=date.today())
 
+    p_collect = sub.add_parser("collect", help="按来源下载视频（授权门禁 + 限速 + 幂等）")
+    p_collect.add_argument("--source-id", required=True)
+    p_collect.add_argument("--adapter", default=None, help="适配器名（默认 local-http）")
+    p_collect.add_argument("--base-url", default=None, help="适配器参数（local-http 的 base URL）")
+    p_collect.add_argument("--outdir", type=Path, required=True)
+    p_collect.add_argument("--registry", type=Path, default=None)
+    p_collect.add_argument("--config", type=Path, default=None, help="CollectConfig JSON 路径")
+    p_collect.add_argument("--limit", type=int, default=None, help="本次最多下载条数")
+
+    p_delete = sub.add_parser("collect-delete", help="删除已下载条目及其状态")
+    p_delete.add_argument("--source-id", required=True)
+    p_delete.add_argument("--item-id", required=True)
+    p_delete.add_argument("--outdir", type=Path, required=True)
+    p_delete.add_argument("--registry", type=Path, default=None)
+
     args = parser.parse_args(argv)
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
         "validate-sample": _cmd_validate_sample,
@@ -313,6 +372,8 @@ def main(argv: list[str] | None = None) -> int:
         "extract-frames": _cmd_extract_frames,
         "detect-subtitles": _cmd_detect_subtitles,
         "distribution-report": _cmd_distribution_report,
+        "collect": _cmd_collect,
+        "collect-delete": _cmd_collect_delete,
     }
     if args.command == "source-registry":
         source_handlers: dict[str, Callable[[argparse.Namespace], int]] = {
