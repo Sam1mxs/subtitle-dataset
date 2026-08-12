@@ -144,3 +144,17 @@ def test_text_policy_ok_recorded(config: SamplingConfig) -> None:
 def test_sample_split_field(config: SamplingConfig) -> None:
     sample = SampleSampler(config).sample(make_clean_image(), 0, split=Split.TRAIN)
     assert sample.record.split == Split.TRAIN
+
+
+def test_normalization_applied_with_language(config: SamplingConfig, tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus.txt"
+    corpus.write_text("今天ＡＢＣ一起吃饭　。\n", encoding="utf-8")
+    strict = config.model_copy(deep=True)
+    strict.corpus_path = str(corpus)
+    strict.single_line_prob = 1.0
+    sample = SampleSampler(strict).sample(make_clean_image(), 0)
+    assert sample.record.text == "今天ＡＢＣ一起吃饭　。"
+    assert sample.record.text_normalized == "今天ABC一起吃饭。"
+    assert sample.record.normalization_version == "1.0"
+    assert sample.record.language == "zh"
+    assert sample.record.script == "CJK"

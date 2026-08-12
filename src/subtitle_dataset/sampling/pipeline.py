@@ -16,6 +16,7 @@ from subtitle_dataset.filtering import (
     assign_geometric_roles,
 )
 from subtitle_dataset.filtering.policy import check_frame_text_policy
+from subtitle_dataset.normalization import TextNormalizer, detect_script
 from subtitle_dataset.qa import check_strict_pairing
 from subtitle_dataset.rendering import PillowRenderer
 from subtitle_dataset.rendering.config import RenderConfig, RenderStyle
@@ -54,6 +55,10 @@ class GeneratedSampleRecord(BaseModel):
     source: SourceInfo | None = None
     transform: Transform | None = None
     build: BuildInfo | None = None
+    text_normalized: str = ""
+    normalization_version: str | None = None
+    language: str | None = None
+    script: str | None = None
     text_policy_ok: bool | None = None
     text_policy_reasons: list[str] = Field(default_factory=list)
     split: Split | None = None
@@ -87,6 +92,10 @@ class SampleSampler:
         self._ffmpeg_version = ffmpeg_version
         self._filtering_config = FilteringConfig()
         self._detector = detector or HeuristicTextRegionDetector(self._filtering_config)
+        self._normalizer = TextNormalizer(
+            language=config.text_language,
+            version=config.text_normalization_version,
+        )
         corpus_path = REPO_ROOT / config.corpus_path
         self._corpus = TextCorpus.load(corpus_path)
 
@@ -107,14 +116,18 @@ class SampleSampler:
         rng = random.Random(sample_seed)
         duration_ms = DurationSampler(self._config.durations, rng).sample()
         text_lines = TextSampler(self._corpus, self._config.single_line_prob, rng).sample()
+        raw_text = "\n".join(text_lines)
+        normalized = self._normalizer.normalize(raw_text)
+        script = detect_script(raw_text)
         style_sampler = StyleSampler(self._config.style, rng)
         position_sampler = PositionSampler(self._config.position, rng)
 
         for _ in range(self._config.max_attempts):
             style = style_sampler.sample()
+            style.language = self._config.text_language
             center = position_sampler.sample()
             render_config = RenderConfig(
-                text="\n".join(text_lines),
+                text=raw_text,
                 style=style,
                 center=center,
                 inpaint_dilation_px=self._config.inpaint_dilation_px,
@@ -181,6 +194,10 @@ class SampleSampler:
                 max_abs_diff_outside_mask=check.max_abs_diff_outside_mask,
                 source=source,
                 transform=transform,
+                text_normalized=normalized.normalized,
+                normalization_version=normalized.version,
+                language=self._config.text_language,
+                script=script,
                 build=BuildInfo(
                     dataset_version=self._config.dataset_version,
                     config_sha256=result.config_sha256,

@@ -6,6 +6,8 @@
   "require_ml_training_fonts": true,
   "corpus_path": "assets/texts/sample_corpus.txt",
   "single_line_prob": 0.75,
+  "text_language": "zh",
+  "text_normalization_version": "1.0",
   "text_policy": {
     "enabled": true,
     "reject_roles": ["subtitle"],

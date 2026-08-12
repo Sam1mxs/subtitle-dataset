@@ -43,6 +43,7 @@ def test_sample_distribution_counts() -> None:
     assert report.pairing_ok == 4
     assert report.fonts == {"noto-sans-cjk-sc": 3, "msyh": 1}
     assert report.line_counts == {1: 3, 2: 1}
+    assert report.scripts == {"unknown": 4}
     assert sum(bucket.count for bucket in report.duration_buckets) == 4
     assert report.duration_out_of_bucket == 0
     assert report.unique_config_hashes == 4

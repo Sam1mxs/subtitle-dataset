@@ -26,6 +26,8 @@ class RenderStyle(BaseModel):
     """字幕渲染样式；相对图像高度的比例参数在渲染时换算为像素。"""
 
     font_ids: list[str] = Field(min_length=1, description="候选字体（按优先级，第一个为主字体）")
+    language: str | None = Field(default=None, description="文本语言（raqm 塑形用，如 zh/ar）")
+    direction: str | None = Field(default=None, description="文本方向（ltr/rtl，None=自动）")
     font_size_h_ratio: float = Field(gt=0, lt=1)
     letter_spacing_px: float = Field(ge=0)
     line_spacing_px: float = Field(ge=0)

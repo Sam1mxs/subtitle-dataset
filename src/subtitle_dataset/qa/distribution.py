@@ -55,6 +55,7 @@ class SampleDistributionReport(BaseModel):
     line_counts: dict[int, int]
     aligns: dict[str, int]
     fill_colors: dict[str, int]
+    scripts: dict[str, int]
     unique_config_hashes: int
     pairing_ok: int
     verdict: str
@@ -94,6 +95,7 @@ def build_sample_distribution(
     line_counts = Counter(str(record["text"]).count("\n") + 1 for record in records)
     aligns = Counter(str(record["style"]["align"]) for record in records)
     fill_colors = Counter(_color_key(record["style"]["fill_color"]) for record in records)
+    scripts = Counter(str(record.get("script") or "unknown") for record in records)
     unique_config = len({str(record["config_sha256"]) for record in records})
     pairing_ok = sum(1 for record in records if record["pairing_ok"])
 
@@ -149,6 +151,7 @@ def build_sample_distribution(
         line_counts={int(key): value for key, value in line_counts.items()},
         aligns=dict(aligns),
         fill_colors=dict(fill_colors),
+        scripts=dict(scripts),
         unique_config_hashes=unique_config,
         pairing_ok=pairing_ok,
         verdict=verdict,

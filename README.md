@@ -51,7 +51,11 @@ subtitle-dataset split --clusters dedup/clusters.json --config configs/splits/de
 使用独立种子（`seed + index * 7919`），输出到 `out/samples/{index}/` 并在
 `out/manifest.json` 汇总。样本级文字过滤（§7 精筛）默认开启：clean 帧的字幕
 目标区域内检出原生字幕文字时拒绝并重试；`--split-map` 可把划分结果写入
-每个样本的 `split` 字段。
+每个样本的 `split` 字段。文本规范化按 `(language, version)` 规则集执行
+（`normalization` 模块，默认 zh/1.0：全角 ASCII、全角空格、空白、换行、去空白），
+样本同时保留 `text`（raw）与 `text_normalized`，并记录 `language`/`script`/
+`normalization_version`；渲染器支持 `language`/`direction` 透传（raqm 塑形，
+为阿拉伯文等复杂脚本预留）。
 
 `extract-frames` 是阶段三 pilot：ffprobe 探测原生帧率/time_base/色彩 → showinfo
 建立帧索引↔PTS↔毫秒时间轴 → scene 滤镜切分场景 → 每场景抽代表帧 → 保持几何比例的

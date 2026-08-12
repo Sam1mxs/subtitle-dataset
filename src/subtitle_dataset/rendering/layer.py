@@ -42,6 +42,8 @@ def render_line_layer(
             stroke_width=stroke_px,
             stroke_fill=style.shadow_color,
             letter_spacing=style.letter_spacing_px,
+            language=style.language,
+            direction=style.direction,
         )
         if blur_px > 0:
             shadow = shadow.filter(ImageFilter.GaussianBlur(blur_px))
@@ -55,6 +57,8 @@ def render_line_layer(
         stroke_width=stroke_px,
         stroke_fill=style.stroke_color,
         letter_spacing=style.letter_spacing_px,
+        language=style.language,
+        direction=style.direction,
     )
 
     bbox = canvas.getchannel("A").getbbox()

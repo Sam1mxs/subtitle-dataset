@@ -55,3 +55,14 @@ def test_shadow_expands_bbox() -> None:
     )
     assert shadowed.width > plain.width
     assert shadowed.height > plain.height
+
+
+def test_render_with_language_param() -> None:
+    font = ImageFont.truetype(DEJAVU_FONT, 32)
+    layer = render_line_layer(
+        "Hello",
+        font,
+        style=_style(language="en"),
+        image_height=640,
+    )
+    assert layer.getchannel("A").getbbox() is not None

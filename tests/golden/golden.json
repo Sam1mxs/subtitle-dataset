@@ -6,5 +6,5 @@
   "alpha_sha256": "0ce0da0bca2322d2e9dda2c4bf73b4dfbedc0742d12ffe4bf4a07d2b0e9b91c5",
   "inpaint_mask_sha256": "83d75de65bee623edb067a38955c71e97c27d5d588c5fe94c5cc63ed41fba265",
   "effect_bbox_xyxy": [50, 461, 310, 499],
-  "config_sha256": "f9d56e024c1a39522eb67b6a7e4cc3dd1f5951c6bd45ac8c842bf14234a4041f"
+  "config_sha256": "41a95ed4e61a217c3fbfbbde025bdffe153cc697752edaa8cc51566272052179"
 }

@@ -124,6 +124,8 @@ class SamplingConfig(BaseModel):
     require_ml_training_fonts: bool = True
     corpus_path: str = "assets/texts/sample_corpus.txt"
     single_line_prob: UnitFloat = 0.75
+    text_language: str = "zh"
+    text_normalization_version: str = "1.0"
     text_policy: SampleTextPolicy = Field(default_factory=SampleTextPolicy)
     durations: DurationDistribution
     style: StyleDistribution
