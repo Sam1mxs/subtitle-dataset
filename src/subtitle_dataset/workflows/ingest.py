@@ -37,6 +37,7 @@ class FrameRecord(BaseModel):
     timestamp_ms: int
     crop_xywh: tuple[int, int, int, int]
     target_size: tuple[int, int]
+    crop_mode: str = "center"
     uri: str
     image_sha256: str
 
@@ -101,6 +102,7 @@ def run_ingest(
                         timestamp_ms=timeline_frame.timestamp_ms,
                         crop_xywh=crop_result.crop_xywh,
                         target_size=crop_result.target_size,
+                        crop_mode=crop_result.crop_mode,
                         uri=uri,
                         image_sha256=sha256_file(target_path),
                     )

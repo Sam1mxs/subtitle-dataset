@@ -2,8 +2,9 @@
   "scene_threshold": 0.35,
   "frames_per_scene": 1,
   "crop": {
-    "mode": "center",
+    "mode": "mixed",
     "seed": 0,
+    "random_ratio": 0.2,
     "targets": [
       {"aspect_w": 16, "aspect_h": 9, "target": [1280, 720], "weight": 1.0}
     ]

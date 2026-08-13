@@ -37,6 +37,7 @@ def test_run_ingest_on_synthetic_video(video_dir: Path) -> None:
         assert (outdir / record.uri).exists()
         assert record.target_size == (1280, 720)
         assert record.crop_xywh == (0, 0, 640, 360)
+        assert record.crop_mode in {"center", "random"}
         assert record.image_sha256
     reloaded = IngestReport.model_validate_json(
         (outdir / "manifest.json").read_text(encoding="utf-8")

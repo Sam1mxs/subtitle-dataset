@@ -60,7 +60,8 @@ subtitle-dataset export-parquet --samples out/manifest.json --frames frames/mani
 
 `extract-frames` 是阶段三 pilot：ffprobe 探测原生帧率/time_base/色彩 → showinfo
 建立帧索引↔PTS↔毫秒时间轴 → scene 滤镜切分场景 → 每场景抽代表帧 → 保持几何比例的
-居中裁剪，输出帧文件与 `manifest.json`（含每个帧的原生 PTS、裁剪信息、图像哈希）。
+裁剪（center/random/mixed，默认 20% 随机裁剪增加构图多样性，记录 crop_mode），
+输出帧文件与 `manifest.json`（含每个帧的原生 PTS、裁剪信息、图像哈希）。
 抽出的帧目录可以直接作为 `generate --clean` 的输入，把真实帧接进采样闭环。
 
 `source-registry` 管理来源登记表（§4）：`validate` 校验字段一致性，
