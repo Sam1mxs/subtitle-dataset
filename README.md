@@ -41,6 +41,8 @@ subtitle-dataset collect-delete --source-id test-src --item-id v001 --outdir raw
 subtitle-dataset dedup --manifests frames/video-a/manifest.json --manifests frames/video-b/manifest.json --outdir dedup/
 subtitle-dataset split --clusters dedup/clusters.json --config configs/splits/default.json --outdir splits/
 subtitle-dataset export-parquet --samples out/manifest.json --frames frames/manifest.json --outdir parquet/
+subtitle-dataset workflow run --config configs/workflows/default.json --outdir build/
+subtitle-dataset workflow status --outdir build/
 ```
 
 `render` 输出 `rendered.png`（合成字幕图）、`alpha.png`（alpha mask）、
@@ -83,6 +85,12 @@ subtitle-dataset export-parquet --samples out/manifest.json --frames frames/mani
 
 `export-parquet` 把样本/帧/场景/失败清单导出为 Parquet（显式 schema、字段拍平，
 可直接用 DuckDB/Spark 查询分析），图像字节仍由 WebDataset 导出另行处理。
+
+`workflow run` 是构建级编排（§15）：ingest → generate → export 一键执行，
+`workflow.json` 记录 run_id（输入+配置+代码版本确定性生成）、各阶段状态、
+依赖版本与配置哈希；同参数重跑自动跳过已完成阶段（幂等），失败后重跑只补
+失败阶段（恢复），`--force` 强制重建全部；回滚 = 用旧的配置快照重新构建
+（同一配置+输入+代码版本产出相同 run_id 与数据）。
 
 ## 目录结构
 

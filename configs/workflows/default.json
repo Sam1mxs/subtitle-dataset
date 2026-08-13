@@ -1,0 +1,11 @@
+{
+  "dataset_version": "v1",
+  "seed": 123456,
+  "video_path": "/tmp/pilot_full.mp4",
+  "n_events": 5,
+  "source_id": null,
+  "registry": null,
+  "ingest_config_path": "configs/ingest/default.json",
+  "sampling_config_path": "configs/sampling/default.json",
+  "export_parquet": true
+}

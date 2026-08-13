@@ -12,7 +12,7 @@ from typing import Any
 
 from PIL import Image
 
-from .contracts import Sample, SampleManifest, SourceInfo, Split, Transform
+from .contracts import Sample, SampleManifest
 from .dedup import (
     ContentCluster,
     SplitAllocator,
@@ -37,8 +37,10 @@ from .qa.distribution import (
     build_sample_distribution,
 )
 from .rendering import PillowRenderer, RenderConfig
-from .sampling import SampleSampler, SamplingConfig, SamplingExhaustedError
-from .workflows import frame_sources_and_transforms, run_ingest
+from .sampling import SamplingConfig
+from .workflows import run_ingest
+from .workflows.build import WorkflowConfig, generate_samples, run_build
+from .workflows.runner import load_run
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -89,132 +91,22 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 def _cmd_generate(args: argparse.Namespace) -> int:
     config = SamplingConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
-    creator_hash: str | None = None
-    if args.source_id is not None:
-        registry = SourceRegistry.load(args.registry or DEFAULT_REGISTRY_PATH)
-        try:
-            source = registry.get(args.source_id)
-        except KeyError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
-            return 2
-        authorization = check_authorization(source, date.today())
-        if not authorization.authorized:
-            print(
-                f"ERROR: 来源 {args.source_id} 未通过授权检查：{'；'.join(authorization.reasons)}",
-                file=sys.stderr,
-            )
-            return 2
-        config.source_platform = source.platform
-        creator_hash = source.creator_id_or_hash
-    args.outdir.mkdir(parents=True, exist_ok=True)
-    records = []
-    frame_paths: list[Path] | None = None
-    sources: list[SourceInfo] = []
-    transforms: list[Transform] = []
-    frame_splits: list[Split] | None = None
-    ffmpeg_version = ""
-    splits_by_item: dict[str, Split] | None = None
-    if args.split_map is not None:
-        if args.frames_manifest is None:
-            print("ERROR: --split-map 需要 --frames-manifest", file=sys.stderr)
-            return 2
-        raw_splits = _load_json(args.split_map)
-        splits_by_item = {item_id: Split(value) for item_id, value in raw_splits.items()}
-    if args.clean.is_dir():
-        frame_paths = sorted(args.clean.glob("*.png"))
-        if not frame_paths:
-            print("ERROR: 帧目录中没有 PNG 文件", file=sys.stderr)
-            return 2
-        if args.frames_manifest is not None:
-            manifest = _load_json(args.frames_manifest)
-            video_sha256 = manifest["video_sha256"]
-            all_sources, all_transforms = frame_sources_and_transforms(
-                manifest,
-                platform=config.source_platform,
-                creator_hash=creator_hash,
-            )
-            by_name = {
-                Path(record["uri"]).name: (record, src, transform)
-                for record, src, transform in zip(
-                    manifest["frames"],
-                    all_sources,
-                    all_transforms,
-                    strict=True,
-                )
-            }
-            if splits_by_item is not None:
-                frame_splits = []
-            for frame_path in frame_paths:
-                entry = by_name.get(frame_path.name)
-                if entry is None:
-                    print(
-                        f"ERROR: 帧 {frame_path.name} 不在 frames manifest 中",
-                        file=sys.stderr,
-                    )
-                    return 2
-                record, src, transform = entry
-                sources.append(src)
-                transforms.append(transform)
-                if frame_splits is not None and splits_by_item is not None:
-                    item_id = f"frame:{video_sha256}:{record['uri']}"
-                    split_value = splits_by_item.get(item_id)
-                    if split_value is None:
-                        print(
-                            f"ERROR: 条目 {item_id} 不在 split map 中",
-                            file=sys.stderr,
-                        )
-                        return 2
-                    frame_splits.append(split_value)
-            ffmpeg_version = manifest.get("ffmpeg_version", "")
-    elif args.frames_manifest is not None:
-        print("ERROR: --frames-manifest 需要 --clean 为帧目录", file=sys.stderr)
+    try:
+        manifest = generate_samples(
+            clean_dir=args.clean if args.clean.is_dir() else None,
+            clean_image=args.clean if not args.clean.is_dir() else None,
+            frames_manifest_path=args.frames_manifest,
+            sampling_config=config,
+            outdir=args.outdir,
+            n_events=args.n,
+            split_map_path=args.split_map,
+            source_id=args.source_id,
+            registry_path=args.registry,
+        )
+    except (ValueError, RuntimeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 2
-    sampler = SampleSampler(config, ffmpeg_version=ffmpeg_version)
-    total_samples = 0
-    events_by_id: dict[str, Any] = {}
-    for index in range(args.n):
-        if frame_paths is not None:
-            clean = Image.open(frame_paths[index % len(frame_paths)]).convert("RGB")
-        else:
-            clean = Image.open(args.clean).convert("RGB")
-        try:
-            samples = sampler.sample_event(
-                clean,
-                index,
-                source=sources[index % len(sources)] if sources else None,
-                transform=transforms[index % len(transforms)] if transforms else None,
-                split=(frame_splits[index % len(frame_splits)] if frame_splits else None),
-            )
-        except SamplingExhaustedError as exc:
-            print(f"ERROR: {exc}", file=sys.stderr)
-            return 2
-        for sample in samples:
-            sample_dir = args.outdir / "samples" / f"{total_samples:05d}"
-            sample_dir.mkdir(parents=True, exist_ok=True)
-            sample.rendered.save(sample_dir / "rendered.png")
-            sample.alpha_mask.save(sample_dir / "alpha.png")
-            sample.inpaint_mask.save(sample_dir / "mask.png")
-            (sample_dir / "sample.json").write_text(
-                sample.record.model_dump_json(indent=2),
-                encoding="utf-8",
-            )
-            records.append(sample.record.model_dump(mode="json"))
-            total_samples += 1
-        if samples and samples[0].record.event is not None:
-            event = samples[0].record.event
-            events_by_id[event.event_id] = event.model_dump(mode="json")
-    manifest = {
-        "dataset_version": config.dataset_version,
-        "seed": config.seed,
-        "n": total_samples,
-        "events": list(events_by_id.values()),
-        "samples": records,
-    }
-    (args.outdir / "manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    print(f"OK: {args.n} 个事件 / {total_samples} 个样本已写入 {args.outdir}")
+    print(f"OK: {args.n} 个事件 / {manifest['n']} 个样本已写入 {args.outdir}")
     return 0
 
 
@@ -399,6 +291,27 @@ def _cmd_export_parquet(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_workflow_run(args: argparse.Namespace) -> int:
+    config = WorkflowConfig.model_validate_json(args.config.read_text(encoding="utf-8"))
+    try:
+        state = run_build(config, args.outdir, force=args.force)
+    except Exception as exc:  # noqa: BLE001 - 工作流失败统一报错
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    summary = ", ".join(f"{name}={stage.status.value}" for name, stage in state.stages.items())
+    print(f"OK: run {state.run_id[:12]} 状态 {state.status.value}；阶段 {summary}")
+    return 0
+
+
+def _cmd_workflow_status(args: argparse.Namespace) -> int:
+    state = load_run(args.outdir)
+    if state is None:
+        print("ERROR: 没有运行记录（outdir 中无 workflow.json）", file=sys.stderr)
+        return 2
+    print(state.model_dump_json(indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="subtitle-dataset", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -505,6 +418,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_export.add_argument("--outdir", type=Path, required=True)
 
+    p_workflow = sub.add_parser("workflow", help="工作流：幂等重跑/失败恢复/强制重建")
+    p_wf_sub = p_workflow.add_subparsers(dest="wf_command", required=True)
+    p_wf_run = p_wf_sub.add_parser("run", help="运行或恢复构建")
+    p_wf_run.add_argument("--config", type=Path, required=True, help="WorkflowConfig JSON 路径")
+    p_wf_run.add_argument("--outdir", type=Path, required=True)
+    p_wf_run.add_argument("--force", action="store_true", help="强制重建全部阶段")
+    p_wf_status = p_wf_sub.add_parser("status", help="查看运行状态")
+    p_wf_status.add_argument("--outdir", type=Path, required=True)
+
     args = parser.parse_args(argv)
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
         "validate-sample": _cmd_validate_sample,
@@ -527,6 +449,12 @@ def main(argv: list[str] | None = None) -> int:
             "check": _cmd_source_registry_check,
         }
         handler = source_handlers[args.src_command]
+    elif args.command == "workflow":
+        workflow_handlers: dict[str, Callable[[argparse.Namespace], int]] = {
+            "run": _cmd_workflow_run,
+            "status": _cmd_workflow_status,
+        }
+        handler = workflow_handlers[args.wf_command]
     else:
         handler = handlers[args.command]
     try:
