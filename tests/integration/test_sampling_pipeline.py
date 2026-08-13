@@ -10,7 +10,10 @@ from tests.helpers import make_clean_image
 
 from subtitle_dataset.contracts import SourceInfo, Split, Transform
 from subtitle_dataset.sampling import (
+    BackgroundBarDistribution,
+    FadeDistribution,
     RangeF,
+    RotationDistribution,
     SampleSampler,
     SamplingConfig,
     SamplingExhaustedError,
@@ -202,3 +205,43 @@ def test_frames_per_event_three(config: SamplingConfig) -> None:
     assert len(event_ids) == 1
     assert [sample.record.event_frame_index for sample in samples] == [0, 1, 2]
     assert all(sample.record.event_frames_total == 3 for sample in samples)
+
+
+def test_fade_produces_per_frame_opacity(config: SamplingConfig) -> None:
+    strict = config.model_copy(deep=True)
+    strict.frames_per_event = 3
+    strict.fade = FadeDistribution(
+        probability=1.0,
+        fade_in_ratio_range=RangeF(min=0.2, max=0.2),
+        fade_out_ratio_range=RangeF(min=0.2, max=0.2),
+    )
+    samples = SampleSampler(strict).sample_event(make_clean_image(), 0)
+    assert len(samples) == 3
+    assert samples[0].record.effective_opacity == pytest.approx(0.0)
+    assert samples[1].record.effective_opacity == pytest.approx(samples[1].record.style.opacity)
+    assert samples[2].record.effective_opacity == pytest.approx(0.0)
+    event = samples[0].record.event
+    assert event is not None
+    assert event.fade_in_ms > 0
+    assert event.fade_out_ms > 0
+
+
+def test_rotation_polygon_consistent(config: SamplingConfig) -> None:
+    strict = config.model_copy(deep=True)
+    strict.style.rotation = RotationDistribution(probability=1.0, max_degrees=5.0)
+    sample = SampleSampler(strict).sample(make_clean_image(), 0)
+    assert sample.record.style.rotation_degrees != 0.0
+    assert sample.record.polygon
+    xs = [point[0] for point in sample.record.polygon]
+    ys = [point[1] for point in sample.record.polygon]
+    ex0, ey0, ex1, ey1 = sample.record.effect_bbox_xyxy
+    assert ex0 <= min(xs) <= max(xs) <= ex1
+    assert ey0 <= min(ys) <= max(ys) <= ey1
+
+
+def test_background_bar_sampled(config: SamplingConfig) -> None:
+    strict = config.model_copy(deep=True)
+    strict.style.background_bar = BackgroundBarDistribution(probability=1.0)
+    sample = SampleSampler(strict).sample(make_clean_image(), 0)
+    assert sample.record.style.background_bar is not None
+    assert sample.record.pairing_ok

@@ -24,7 +24,13 @@ from subtitle_dataset.rendering.renderer import RENDERER_VERSION, RenderResult
 
 from .config import REPO_ROOT, SamplingConfig
 from .durations import DurationSampler
-from .events import SubtitleEventSpec, compute_event_id, ms_to_pts
+from .events import (
+    SubtitleEventSpec,
+    compute_event_id,
+    fade_factor,
+    ms_to_pts,
+    representative_time_ms,
+)
 from .positions import PositionSampler
 from .styles import StyleSampler
 from .texts import TextCorpus, TextSampler
@@ -66,6 +72,8 @@ class GeneratedSampleRecord(BaseModel):
     event: SubtitleEventSpec | None = None
     event_frame_index: int = 0
     event_frames_total: int = 1
+    polygon: list[tuple[float, float]] = Field(default_factory=list)
+    effective_opacity: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -144,6 +152,7 @@ class SampleSampler:
         style_sampler = StyleSampler(self._config.style, rng)
         position_sampler = PositionSampler(self._config.position, rng)
         frames_per_event = self._config.frames_per_event
+        fade_in_ms, fade_out_ms = self._fade_params(duration_ms, rng)
 
         for _ in range(self._config.max_attempts):
             style = style_sampler.sample()
@@ -170,67 +179,104 @@ class SampleSampler:
                 end_time_ms=timing["end_time_ms"],
                 duration_ms=duration_ms,
                 frames_per_event=frames_per_event,
+                fade_in_ms=fade_in_ms,
+                fade_out_ms=fade_out_ms,
             )
-            render_config = RenderConfig(
+            base_config = RenderConfig(
                 text=raw_text,
                 style=style,
                 center=center,
                 inpaint_dilation_px=self._config.inpaint_dilation_px,
                 require_ml_training_fonts=self._config.require_ml_training_fonts,
             )
-            attempt = self._render_attempt(clean, render_config, index)
-            if attempt is None:
-                continue
-            result, text_policy_ok, text_policy_reasons = attempt
-            return [
-                GeneratedSample(
-                    record=GeneratedSampleRecord(
-                        sample_index=index,
-                        sample_seed=sample_seed,
-                        duration_ms=duration_ms,
-                        text=render_config.text,
-                        style=style,
-                        center=center,
-                        inpaint_dilation_px=self._config.inpaint_dilation_px,
-                        effect_bbox_xyxy=result.effect_bbox_xyxy,
-                        line_bboxes_xyxy=result.line_bboxes_xyxy,
-                        config_sha256=result.config_sha256,
-                        font_id=result.font_id,
-                        font_sha256=result.font_sha256,
-                        fallback_used=result.fallback_used,
-                        missing_chars=result.missing_chars,
-                        pairing_ok=True,
-                        max_abs_diff_outside_mask=0,
-                        source=source,
-                        transform=transform,
-                        text_normalized=normalized.normalized,
-                        normalization_version=normalized.version,
-                        language=self._config.text_language,
-                        script=script,
-                        build=BuildInfo(
-                            dataset_version=self._config.dataset_version,
-                            config_sha256=result.config_sha256,
-                            renderer_version=RENDERER_VERSION,
-                            ffmpeg_version=self._ffmpeg_version,
-                            seed=sample_seed,
-                        ),
-                        text_policy_ok=text_policy_ok,
-                        text_policy_reasons=text_policy_reasons,
-                        split=split,
-                        event=event,
-                        event_frame_index=frame_index,
-                        event_frames_total=frames_per_event,
-                    ),
-                    rendered=result.rendered,
-                    alpha_mask=result.alpha_mask,
-                    inpaint_mask=result.inpaint_mask,
+            samples: list[GeneratedSample] = []
+            for frame_index in range(frames_per_event):
+                frame_time = representative_time_ms(
+                    event.start_time_ms,
+                    event.duration_ms,
+                    frames_per_event,
+                    frame_index,
                 )
-                for frame_index in range(frames_per_event)
-            ]
+                factor = fade_factor(
+                    frame_time,
+                    event.start_time_ms,
+                    event.end_time_ms,
+                    fade_in_ms,
+                    fade_out_ms,
+                )
+                effective_opacity = style.opacity * factor
+                render_config = base_config.model_copy(
+                    update={"opacity_override": effective_opacity}
+                )
+                attempt = self._render_attempt(clean, render_config, index)
+                if attempt is None:
+                    samples = []
+                    break
+                result, text_policy_ok, text_policy_reasons = attempt
+                samples.append(
+                    GeneratedSample(
+                        record=GeneratedSampleRecord(
+                            sample_index=index,
+                            sample_seed=sample_seed,
+                            duration_ms=duration_ms,
+                            text=render_config.text,
+                            style=style,
+                            center=center,
+                            inpaint_dilation_px=self._config.inpaint_dilation_px,
+                            effect_bbox_xyxy=result.effect_bbox_xyxy,
+                            line_bboxes_xyxy=result.line_bboxes_xyxy,
+                            config_sha256=result.config_sha256,
+                            font_id=result.font_id,
+                            font_sha256=result.font_sha256,
+                            fallback_used=result.fallback_used,
+                            missing_chars=result.missing_chars,
+                            pairing_ok=True,
+                            max_abs_diff_outside_mask=0,
+                            source=source,
+                            transform=transform,
+                            text_normalized=normalized.normalized,
+                            normalization_version=normalized.version,
+                            language=self._config.text_language,
+                            script=script,
+                            build=BuildInfo(
+                                dataset_version=self._config.dataset_version,
+                                config_sha256=result.config_sha256,
+                                renderer_version=RENDERER_VERSION,
+                                ffmpeg_version=self._ffmpeg_version,
+                                seed=sample_seed,
+                            ),
+                            text_policy_ok=text_policy_ok,
+                            text_policy_reasons=text_policy_reasons,
+                            split=split,
+                            event=event,
+                            event_frame_index=frame_index,
+                            event_frames_total=frames_per_event,
+                            polygon=result.polygon,
+                            effective_opacity=effective_opacity,
+                        ),
+                        rendered=result.rendered,
+                        alpha_mask=result.alpha_mask,
+                        inpaint_mask=result.inpaint_mask,
+                    )
+                )
+            if samples:
+                return samples
 
         raise SamplingExhaustedError(
             f"事件 {index} 在 {self._config.max_attempts} 次尝试内未生成合法布局"
         )
+
+    def _fade_params(self, duration_ms: int, rng: random.Random) -> tuple[int, int]:
+        fade = self._config.fade
+        if rng.random() >= fade.probability:
+            return 0, 0
+        fade_in = round(duration_ms * fade.fade_in_ratio_range.sample(rng))
+        fade_out = round(duration_ms * fade.fade_out_ratio_range.sample(rng))
+        if fade_in + fade_out > duration_ms:
+            scale = duration_ms / (fade_in + fade_out)
+            fade_in = round(fade_in * scale)
+            fade_out = round(fade_out * scale)
+        return fade_in, fade_out
 
     def _render_attempt(
         self,

@@ -84,6 +84,25 @@ class ShadowDistribution(BaseModel):
     colors: list[ColorOption] | None = None
 
 
+class BackgroundBarDistribution(BaseModel):
+    probability: UnitFloat = 0.3
+    colors: list[ColorOption] = Field(default_factory=lambda: [ColorOption(color=(0, 0, 0, 180))])
+    padding_x_h_ratio_range: RangeF = RangeF(min=0.005, max=0.015)
+    padding_y_h_ratio_range: RangeF = RangeF(min=0.004, max=0.010)
+    corner_radius_h_ratio_range: RangeF = RangeF(min=0.005, max=0.015)
+
+
+class RotationDistribution(BaseModel):
+    probability: UnitFloat = 0.15
+    max_degrees: float = Field(gt=0.0, default=8.0)
+
+
+class FadeDistribution(BaseModel):
+    probability: UnitFloat = 0.3
+    fade_in_ratio_range: RangeF = RangeF(min=0.0, max=0.2)
+    fade_out_ratio_range: RangeF = RangeF(min=0.0, max=0.2)
+
+
 class StyleDistribution(BaseModel):
     """样式分布；所有比例参数均相对最终图像高度。"""
 
@@ -97,6 +116,8 @@ class StyleDistribution(BaseModel):
     fill_colors: list[ColorOption] = Field(min_length=1)
     stroke_colors: list[ColorOption] = Field(min_length=1)
     shadow: ShadowDistribution = ShadowDistribution()
+    background_bar: BackgroundBarDistribution = BackgroundBarDistribution()
+    rotation: RotationDistribution = RotationDistribution()
 
     @model_validator(mode="after")
     def _check_align_keys(self) -> StyleDistribution:
@@ -127,6 +148,7 @@ class SamplingConfig(BaseModel):
     text_language: str = "zh"
     text_normalization_version: str = "1.0"
     frames_per_event: int = Field(ge=1, le=3, default=1)
+    fade: FadeDistribution = Field(default_factory=FadeDistribution)
     text_policy: SampleTextPolicy = Field(default_factory=SampleTextPolicy)
     durations: DurationDistribution
     style: StyleDistribution

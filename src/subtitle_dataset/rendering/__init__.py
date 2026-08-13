@@ -1,6 +1,6 @@
 """字幕渲染：layout、RGBA 图层与合成。"""
 
-from .config import RGBA, Center, RenderConfig, RenderStyle, TextAlign
+from .config import RGBA, BackgroundBar, Center, RenderConfig, RenderStyle, TextAlign
 from .fonts import (
     FontCoverageError,
     FontLicense,
@@ -13,6 +13,7 @@ from .renderer import RENDERER_VERSION, PillowRenderer, RenderResult
 
 __all__ = [
     "Center",
+    "BackgroundBar",
     "FontCoverageError",
     "FontLicense",
     "FontLicenseError",

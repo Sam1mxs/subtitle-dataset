@@ -12,7 +12,7 @@ from subtitle_dataset.contracts import config_sha256
 from .config import RenderConfig
 from .fonts import FontRegistry
 from .layer import render_line_layer
-from .layout import compose_lines, load_font, split_lines
+from .layout import BarSpec, compose_lines, load_font, rotate_block, split_lines
 
 RENDERER_VERSION = "0.1.0"
 
@@ -24,6 +24,8 @@ class RenderResult:
     inpaint_mask: Image.Image
     effect_bbox_xyxy: tuple[int, int, int, int]
     line_bboxes_xyxy: list[tuple[int, int, int, int]]
+    polygon: list[tuple[float, float]]
+    effective_opacity: float
     config_sha256: str
     font_id: str
     font_sha256: str
@@ -55,11 +57,21 @@ class PillowRenderer:
             render_line_layer(line, font, style=style, image_height=height)
             for line in split_lines(config.text)
         ]
+        bar = None
+        if style.background_bar is not None:
+            bar = BarSpec(
+                color=style.background_bar.color,
+                padding_x=round(style.background_bar.padding_x_h_ratio * height),
+                padding_y=round(style.background_bar.padding_y_h_ratio * height),
+                corner_radius=round(style.background_bar.corner_radius_h_ratio * height),
+            )
         block = compose_lines(
             line_images,
             align=style.align,
             line_spacing_px=round(style.line_spacing_px),
+            background_bar=bar,
         )
+        block = rotate_block(block, style.rotation_degrees)
 
         bx0, by0, bx1, by1 = block.effect_bbox
         center_x = round(config.center[0] * width)
@@ -78,8 +90,11 @@ class PillowRenderer:
 
         canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         canvas.alpha_composite(block.layer, (paste_x, paste_y))
-        if style.opacity < 1.0:
-            alpha = canvas.getchannel("A").point(lambda a: round(a * style.opacity))
+        effective_opacity = (
+            config.opacity_override if config.opacity_override is not None else style.opacity
+        )
+        if effective_opacity < 1.0:
+            alpha = canvas.getchannel("A").point(lambda a: round(a * effective_opacity))
             canvas.putalpha(alpha)
 
         composed = Image.alpha_composite(clean.convert("RGBA"), canvas)
@@ -92,6 +107,11 @@ class PillowRenderer:
             for (x0, y0, x1, y1) in block.line_bboxes
         ]
         effect_bbox = (bx0 + paste_x, by0 + paste_y, bx1 + paste_x, by1 + paste_y)
+        polygon = (
+            [(x + paste_x, y + paste_y) for x, y in block.polygon_local]
+            if block.polygon_local is not None
+            else []
+        )
 
         return RenderResult(
             rendered=rendered,
@@ -99,6 +119,8 @@ class PillowRenderer:
             inpaint_mask=inpaint_mask,
             effect_bbox_xyxy=effect_bbox,
             line_bboxes_xyxy=line_bboxes,
+            polygon=polygon,
+            effective_opacity=effective_opacity,
             config_sha256=self._config_sha256(config),
             font_id=resolution.font_id,
             font_sha256=resolution.font_sha256,

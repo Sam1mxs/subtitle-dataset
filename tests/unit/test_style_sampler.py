@@ -5,7 +5,13 @@ from __future__ import annotations
 import random
 
 from subtitle_dataset.rendering.config import TextAlign
-from subtitle_dataset.sampling import StyleDistribution, StyleSampler
+from subtitle_dataset.sampling import (
+    BackgroundBarDistribution,
+    RangeF,
+    RotationDistribution,
+    StyleDistribution,
+    StyleSampler,
+)
 
 
 def _distribution() -> StyleDistribution:
@@ -60,3 +66,22 @@ def test_shadow_probability_one_always_on() -> None:
     sampler = StyleSampler(_distribution(), random.Random(2))
     offsets = [sampler.sample().shadow_offset_xy for _ in range(20)]
     assert any(offset != (0.0, 0.0) for offset in offsets)
+
+
+def test_background_bar_and_rotation_ranges() -> None:
+    dist = _distribution().model_copy(
+        update={
+            "background_bar": BackgroundBarDistribution(
+                probability=1.0,
+                padding_x_h_ratio_range=RangeF(min=0.01, max=0.01),
+                padding_y_h_ratio_range=RangeF(min=0.01, max=0.01),
+                corner_radius_h_ratio_range=RangeF(min=0.01, max=0.01),
+            ),
+            "rotation": RotationDistribution(probability=1.0, max_degrees=5.0),
+        }
+    )
+    sampler = StyleSampler(dist, random.Random(1))
+    styles = [sampler.sample() for _ in range(10)]
+    assert all(style.background_bar is not None for style in styles)
+    assert all(-5.0 <= style.rotation_degrees <= 5.0 for style in styles)
+    assert any(style.rotation_degrees != 0.0 for style in styles)

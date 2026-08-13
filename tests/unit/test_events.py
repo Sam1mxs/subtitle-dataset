@@ -12,6 +12,7 @@ from subtitle_dataset.rendering.config import RenderStyle
 from subtitle_dataset.sampling import (
     SubtitleEventSpec,
     compute_event_id,
+    fade_factor,
     ms_to_pts,
     representative_time_ms,
 )
@@ -92,3 +93,11 @@ def test_event_id_deterministic() -> None:
     changed = compute_event_id(seed=1, text_raw="你好", style_seed=5, start_time_ms=2000)
     assert first == second
     assert first != changed
+
+
+def test_fade_factor_ramp() -> None:
+    assert fade_factor(1000, 1000, 4000, 1000, 1000) == pytest.approx(0.0)
+    assert fade_factor(1500, 1000, 4000, 1000, 1000) == pytest.approx(0.5)
+    assert fade_factor(2500, 1000, 4000, 1000, 1000) == pytest.approx(1.0)
+    assert fade_factor(3500, 1000, 4000, 1000, 1000) == pytest.approx(0.5)
+    assert fade_factor(4000, 1000, 4000, 1000, 1000) == pytest.approx(0.0)

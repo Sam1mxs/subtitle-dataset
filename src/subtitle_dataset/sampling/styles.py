@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from subtitle_dataset.rendering.config import RenderStyle, TextAlign
+from subtitle_dataset.rendering.config import BackgroundBar, RenderStyle, TextAlign
 
 from .config import ColorOption, StyleDistribution, weighted_choice
 
@@ -27,6 +27,21 @@ class StyleSampler:
             shadow_dx = self._rng.uniform(0.0, shadow.offset_xy_max[0])
             shadow_dy = self._rng.uniform(0.0, shadow.offset_xy_max[1])
         shadow_colors = shadow.colors or dist.stroke_colors
+        bar = None
+        if self._rng.random() < dist.background_bar.probability:
+            bar_dist = dist.background_bar
+            bar = BackgroundBar(
+                color=weighted_choice(self._rng, _color_choices(bar_dist.colors)),
+                padding_x_h_ratio=bar_dist.padding_x_h_ratio_range.sample(self._rng),
+                padding_y_h_ratio=bar_dist.padding_y_h_ratio_range.sample(self._rng),
+                corner_radius_h_ratio=bar_dist.corner_radius_h_ratio_range.sample(self._rng),
+            )
+        rotation = 0.0
+        if self._rng.random() < dist.rotation.probability:
+            rotation = self._rng.uniform(
+                -dist.rotation.max_degrees,
+                dist.rotation.max_degrees,
+            )
 
         return RenderStyle(
             font_ids=[font_option.font_id],
@@ -44,6 +59,8 @@ class StyleSampler:
             shadow_color=weighted_choice(self._rng, _color_choices(shadow_colors)),
             shadow_offset_xy=(shadow_dx, shadow_dy),
             shadow_blur_px=shadow.blur_px_range.sample(self._rng),
+            background_bar=bar,
+            rotation_degrees=rotation,
         )
 
 

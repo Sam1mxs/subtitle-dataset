@@ -49,7 +49,23 @@
       "offset_xy_max": [3.0, 3.0],
       "blur_px_range": {"min": 0.0, "max": 2.0},
       "colors": [{"color": [0, 0, 0, 255], "weight": 1.0}]
+    },
+    "background_bar": {
+      "probability": 0.3,
+      "colors": [{"color": [0, 0, 0, 180], "weight": 1.0}],
+      "padding_x_h_ratio_range": {"min": 0.005, "max": 0.015},
+      "padding_y_h_ratio_range": {"min": 0.004, "max": 0.01},
+      "corner_radius_h_ratio_range": {"min": 0.005, "max": 0.015}
+    },
+    "rotation": {
+      "probability": 0.15,
+      "max_degrees": 8.0
     }
+  },
+  "fade": {
+    "probability": 0.3,
+    "fade_in_ratio_range": {"min": 0.0, "max": 0.2},
+    "fade_out_ratio_range": {"min": 0.0, "max": 0.2}
   },
   "position": {
     "center_y_range": {"min": 0.65, "max": 0.85},
