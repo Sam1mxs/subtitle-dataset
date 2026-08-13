@@ -40,6 +40,7 @@ subtitle-dataset collect --source-id test-src --source-id test-src-2 --adapter l
 subtitle-dataset collect-delete --source-id test-src --item-id v001 --outdir raw/
 subtitle-dataset dedup --manifests frames/video-a/manifest.json --manifests frames/video-b/manifest.json --outdir dedup/
 subtitle-dataset split --clusters dedup/clusters.json --config configs/splits/default.json --outdir splits/
+subtitle-dataset export-parquet --samples out/manifest.json --frames frames/manifest.json --outdir parquet/
 ```
 
 `render` 输出 `rendered.png`（合成字幕图）、`alpha.png`（alpha mask）、
@@ -78,6 +79,9 @@ subtitle-dataset split --clusters dedup/clusters.json --config configs/splits/de
 平台/作者/视频分组上限（不满足时记录警告）。感知哈希近重复聚类接口已提供
 （`dedup.hashing.DifferenceHash` + `build_near_clusters`），待真实视频池接入；
 `split` 同时输出 `item_splits.json`（条目 → split），供 `generate --split-map` 使用。
+
+`export-parquet` 把样本/帧/场景/失败清单导出为 Parquet（显式 schema、字段拍平，
+可直接用 DuckDB/Spark 查询分析），图像字节仍由 WebDataset 导出另行处理。
 
 ## 目录结构
 

@@ -20,6 +20,7 @@ from .dedup import (
     build_exact_clusters,
     items_from_ingest_manifest,
 )
+from .export import export_ingest_manifest, export_samples_manifest
 from .filtering import FilteringConfig, VideoSubtitleFilter
 from .ingest import (
     ADAPTERS,
@@ -372,6 +373,20 @@ def _cmd_split(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_export_parquet(args: argparse.Namespace) -> int:
+    if args.samples is None and args.frames is None:
+        print("ERROR: --samples 或 --frames 至少提供一个", file=sys.stderr)
+        return 2
+    args.outdir.mkdir(parents=True, exist_ok=True)
+    if args.samples is not None:
+        path = export_samples_manifest(_load_json(args.samples), args.outdir)
+        print(f"OK: {path}")
+    if args.frames is not None:
+        for path in export_ingest_manifest(_load_json(args.frames), args.outdir):
+            print(f"OK: {path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="subtitle-dataset", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -471,6 +486,13 @@ def main(argv: list[str] | None = None) -> int:
     p_split.add_argument("--config", type=Path, required=True, help="SplitConfig JSON 路径")
     p_split.add_argument("--outdir", type=Path, required=True)
 
+    p_export = sub.add_parser("export-parquet", help="把 JSON manifest 导出为 Parquet")
+    p_export.add_argument("--samples", type=Path, default=None, help="generate 的 manifest.json")
+    p_export.add_argument(
+        "--frames", type=Path, default=None, help="extract-frames 的 manifest.json"
+    )
+    p_export.add_argument("--outdir", type=Path, required=True)
+
     args = parser.parse_args(argv)
     handlers: dict[str, Callable[[argparse.Namespace], int]] = {
         "validate-sample": _cmd_validate_sample,
@@ -485,6 +507,7 @@ def main(argv: list[str] | None = None) -> int:
         "collect-delete": _cmd_collect_delete,
         "dedup": _cmd_dedup,
         "split": _cmd_split,
+        "export-parquet": _cmd_export_parquet,
     }
     if args.command == "source-registry":
         source_handlers: dict[str, Callable[[argparse.Namespace], int]] = {
