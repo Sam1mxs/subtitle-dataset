@@ -20,7 +20,7 @@ from .dedup import (
     build_exact_clusters,
     items_from_ingest_manifest,
 )
-from .export import export_ingest_manifest, export_samples_manifest
+from .export import export_events_manifest, export_ingest_manifest, export_samples_manifest
 from .filtering import FilteringConfig, VideoSubtitleFilter
 from .ingest import (
     ADAPTERS,
@@ -170,13 +170,15 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         print("ERROR: --frames-manifest 需要 --clean 为帧目录", file=sys.stderr)
         return 2
     sampler = SampleSampler(config, ffmpeg_version=ffmpeg_version)
+    total_samples = 0
+    events_by_id: dict[str, Any] = {}
     for index in range(args.n):
         if frame_paths is not None:
             clean = Image.open(frame_paths[index % len(frame_paths)]).convert("RGB")
         else:
             clean = Image.open(args.clean).convert("RGB")
         try:
-            sample = sampler.sample(
+            samples = sampler.sample_event(
                 clean,
                 index,
                 source=sources[index % len(sources)] if sources else None,
@@ -186,27 +188,33 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         except SamplingExhaustedError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
-        sample_dir = args.outdir / "samples" / f"{index:05d}"
-        sample_dir.mkdir(parents=True, exist_ok=True)
-        sample.rendered.save(sample_dir / "rendered.png")
-        sample.alpha_mask.save(sample_dir / "alpha.png")
-        sample.inpaint_mask.save(sample_dir / "mask.png")
-        (sample_dir / "sample.json").write_text(
-            sample.record.model_dump_json(indent=2),
-            encoding="utf-8",
-        )
-        records.append(sample.record.model_dump(mode="json"))
+        for sample in samples:
+            sample_dir = args.outdir / "samples" / f"{total_samples:05d}"
+            sample_dir.mkdir(parents=True, exist_ok=True)
+            sample.rendered.save(sample_dir / "rendered.png")
+            sample.alpha_mask.save(sample_dir / "alpha.png")
+            sample.inpaint_mask.save(sample_dir / "mask.png")
+            (sample_dir / "sample.json").write_text(
+                sample.record.model_dump_json(indent=2),
+                encoding="utf-8",
+            )
+            records.append(sample.record.model_dump(mode="json"))
+            total_samples += 1
+        if samples and samples[0].record.event is not None:
+            event = samples[0].record.event
+            events_by_id[event.event_id] = event.model_dump(mode="json")
     manifest = {
         "dataset_version": config.dataset_version,
         "seed": config.seed,
-        "n": args.n,
+        "n": total_samples,
+        "events": list(events_by_id.values()),
         "samples": records,
     }
     (args.outdir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    print(f"OK: {args.n} 个样本已写入 {args.outdir}")
+    print(f"OK: {args.n} 个事件 / {total_samples} 个样本已写入 {args.outdir}")
     return 0
 
 
@@ -379,8 +387,12 @@ def _cmd_export_parquet(args: argparse.Namespace) -> int:
         return 2
     args.outdir.mkdir(parents=True, exist_ok=True)
     if args.samples is not None:
-        path = export_samples_manifest(_load_json(args.samples), args.outdir)
+        data = _load_json(args.samples)
+        path = export_samples_manifest(data, args.outdir)
         print(f"OK: {path}")
+        if "events" in data:
+            events_path = export_events_manifest(data, args.outdir)
+            print(f"OK: {events_path}")
     if args.frames is not None:
         for path in export_ingest_manifest(_load_json(args.frames), args.outdir):
             print(f"OK: {path}")

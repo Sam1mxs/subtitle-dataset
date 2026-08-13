@@ -128,6 +128,28 @@ FAILURES_SCHEMA = pa.schema(
     ]
 )
 
+EVENTS_SCHEMA = pa.schema(
+    [
+        pa.field("event_id", pa.string()),
+        pa.field("text_raw", pa.string()),
+        pa.field("text_normalized", pa.string()),
+        pa.field("normalization_version", pa.string()),
+        pa.field("start_time_ms", pa.int64()),
+        pa.field("end_time_ms", pa.int64()),
+        pa.field("duration_ms", pa.int64()),
+        pa.field("start_pts", pa.int64()),
+        pa.field("end_pts_exclusive", pa.int64()),
+        pa.field("start_native_frame", pa.int64()),
+        pa.field("end_native_frame_exclusive", pa.int64()),
+        pa.field("native_duration_frames", pa.int64()),
+        pa.field("frames_per_event", pa.int64()),
+        pa.field("style_font_ids", pa.list_(pa.string())),
+        pa.field("style_font_size_h_ratio", pa.float64()),
+        pa.field("style_align", pa.string()),
+        pa.field("language", pa.string()),
+    ]
+)
+
 
 def sample_record_to_row(record: Mapping[str, Any]) -> dict[str, Any]:
     style = record.get("style") or {}
@@ -270,6 +292,29 @@ def ingest_manifest_to_rows(
     return frames, scenes, failures
 
 
+def event_spec_to_row(event: Mapping[str, Any]) -> dict[str, Any]:
+    style = event.get("style") or {}
+    return {
+        "event_id": event.get("event_id"),
+        "text_raw": event.get("text_raw"),
+        "text_normalized": event.get("text_normalized"),
+        "normalization_version": event.get("normalization_version"),
+        "start_time_ms": event.get("start_time_ms"),
+        "end_time_ms": event.get("end_time_ms"),
+        "duration_ms": event.get("duration_ms"),
+        "start_pts": event.get("start_pts"),
+        "end_pts_exclusive": event.get("end_pts_exclusive"),
+        "start_native_frame": event.get("start_native_frame"),
+        "end_native_frame_exclusive": event.get("end_native_frame_exclusive"),
+        "native_duration_frames": event.get("native_duration_frames"),
+        "frames_per_event": event.get("frames_per_event"),
+        "style_font_ids": style.get("font_ids") or [],
+        "style_font_size_h_ratio": style.get("font_size_h_ratio"),
+        "style_align": style.get("align"),
+        "language": event.get("language"),
+    }
+
+
 def write_records(records: Sequence[Mapping[str, Any]], schema: pa.Schema, path: Path) -> Path:
     """按显式 schema 写 Parquet；空列表也写出（保留 schema）。"""
     table = pa.Table.from_pylist([dict(record) for record in records], schema=schema)
@@ -281,6 +326,11 @@ def write_records(records: Sequence[Mapping[str, Any]], schema: pa.Schema, path:
 def export_samples_manifest(manifest: Mapping[str, Any], outdir: Path) -> Path:
     rows = [sample_record_to_row(record) for record in manifest.get("samples", [])]
     return write_records(rows, SAMPLES_SCHEMA, outdir / "samples.parquet")
+
+
+def export_events_manifest(manifest: Mapping[str, Any], outdir: Path) -> Path:
+    rows = [event_spec_to_row(event) for event in manifest.get("events", [])]
+    return write_records(rows, EVENTS_SCHEMA, outdir / "events.parquet")
 
 
 def export_ingest_manifest(manifest: Mapping[str, Any], outdir: Path) -> list[Path]:

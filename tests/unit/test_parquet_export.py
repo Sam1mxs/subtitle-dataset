@@ -8,7 +8,10 @@ from typing import Any
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 
 from subtitle_dataset.export import (
+    EVENTS_SCHEMA,
     SAMPLES_SCHEMA,
+    event_spec_to_row,
+    export_events_manifest,
     export_ingest_manifest,
     export_samples_manifest,
     ingest_manifest_to_rows,
@@ -183,3 +186,36 @@ def test_export_samples_manifest(tmp_path: Path) -> None:
     manifest = {"samples": [_sample_record(), _sample_record(1), _sample_record(2)]}
     path = export_samples_manifest(manifest, tmp_path / "out")
     assert pq.read_table(path).num_rows == 3
+
+
+def test_event_row_and_export(tmp_path: Path) -> None:
+    events = [
+        {
+            "event_id": "event-1",
+            "text_raw": "你好",
+            "text_normalized": "你好",
+            "normalization_version": "1.0",
+            "start_time_ms": 1000,
+            "end_time_ms": 4000,
+            "duration_ms": 3000,
+            "start_pts": 1000,
+            "end_pts_exclusive": 4000,
+            "start_native_frame": 10,
+            "end_native_frame_exclusive": 40,
+            "native_duration_frames": 30,
+            "frames_per_event": 1,
+            "style": {
+                "font_ids": ["noto-sans-cjk-sc"],
+                "font_size_h_ratio": 0.04,
+                "align": "center",
+            },
+            "language": "zh",
+        }
+    ]
+    row = event_spec_to_row(events[0])
+    assert row["style_font_ids"] == ["noto-sans-cjk-sc"]
+    assert row["duration_ms"] == 3000
+    path = export_events_manifest({"events": events}, tmp_path / "out")
+    table = pq.read_table(path)
+    assert table.num_rows == 1
+    assert table.schema == EVENTS_SCHEMA

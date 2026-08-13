@@ -126,6 +126,7 @@ class SamplingConfig(BaseModel):
     single_line_prob: UnitFloat = 0.75
     text_language: str = "zh"
     text_normalization_version: str = "1.0"
+    frames_per_event: int = Field(ge=1, le=3, default=1)
     text_policy: SampleTextPolicy = Field(default_factory=SampleTextPolicy)
     durations: DurationDistribution
     style: StyleDistribution

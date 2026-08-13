@@ -158,3 +158,47 @@ def test_normalization_applied_with_language(config: SamplingConfig, tmp_path: P
     assert sample.record.normalization_version == "1.0"
     assert sample.record.language == "zh"
     assert sample.record.script == "CJK"
+
+
+def test_event_default_single_frame(config: SamplingConfig) -> None:
+    sample = SampleSampler(config).sample(make_clean_image(), 0)
+    event = sample.record.event
+    assert event is not None
+    assert event.frames_per_event == 1
+    assert sample.record.event_frame_index == 0
+    assert sample.record.event_frames_total == 1
+    assert event.end_time_ms - event.start_time_ms == event.duration_ms
+    assert event.native_duration_frames == (
+        event.end_native_frame_exclusive - event.start_native_frame
+    )
+
+
+def test_event_timestamp_contains_source_frame(config: SamplingConfig) -> None:
+    source = SourceInfo(
+        platform="bilibili",
+        video_sha256="a" * 64,
+        native_frame_index=45,
+        pts=45000,
+        timestamp_ms=1500,
+        time_base={"num": 1, "den": 30000},
+        frame_rate={"avg_num": 30, "avg_den": 1, "r_num": 30, "r_den": 1, "is_vfr": False},
+    )
+    sample = SampleSampler(config).sample(make_clean_image(), 0, source=source)
+    event = sample.record.event
+    assert event is not None
+    assert event.start_time_ms <= source.timestamp_ms < event.end_time_ms
+
+
+def test_frames_per_event_three(config: SamplingConfig) -> None:
+    strict = config.model_copy(deep=True)
+    strict.frames_per_event = 3
+    samples = SampleSampler(strict).sample_event(make_clean_image(), 0)
+    assert len(samples) == 3
+    event_ids = set()
+    for sample in samples:
+        event = sample.record.event
+        assert event is not None
+        event_ids.add(event.event_id)
+    assert len(event_ids) == 1
+    assert [sample.record.event_frame_index for sample in samples] == [0, 1, 2]
+    assert all(sample.record.event_frames_total == 3 for sample in samples)

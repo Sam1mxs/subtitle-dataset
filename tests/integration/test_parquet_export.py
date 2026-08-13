@@ -9,7 +9,7 @@ import pyarrow.parquet as pq  # type: ignore[import-untyped]
 import pytest
 from tests.helpers import make_synthetic_video
 
-from subtitle_dataset.export import FRAMES_SCHEMA, SAMPLES_SCHEMA, SCENES_SCHEMA
+from subtitle_dataset.export import EVENTS_SCHEMA, FRAMES_SCHEMA, SAMPLES_SCHEMA, SCENES_SCHEMA
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INGEST_CONFIG = REPO_ROOT / "configs" / "ingest" / "default.json"
@@ -74,11 +74,14 @@ def test_export_parquet_cli(tmp_path: Path) -> None:
         == 0
     )
     samples = pq.read_table(parquet_out / "samples.parquet")
+    events = pq.read_table(parquet_out / "events.parquet")
     frames = pq.read_table(parquet_out / "frames.parquet")
     scenes = pq.read_table(parquet_out / "scenes.parquet")
     failures = pq.read_table(parquet_out / "failures.parquet")
     assert samples.num_rows == 3
     assert samples.schema == SAMPLES_SCHEMA
+    assert events.num_rows == 3
+    assert events.schema == EVENTS_SCHEMA
     assert frames.num_rows == 2
     assert frames.schema == FRAMES_SCHEMA
     assert scenes.num_rows == 2

@@ -8,6 +8,7 @@
   "single_line_prob": 0.75,
   "text_language": "zh",
   "text_normalization_version": "1.0",
+  "frames_per_event": 1,
   "text_policy": {
     "enabled": true,
     "reject_roles": ["subtitle"],

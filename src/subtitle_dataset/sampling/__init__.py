@@ -14,6 +14,12 @@ from .config import (
     weighted_choice,
 )
 from .durations import DurationSampler
+from .events import (
+    SubtitleEventSpec,
+    compute_event_id,
+    ms_to_pts,
+    representative_time_ms,
+)
 from .pipeline import (
     GeneratedSample,
     GeneratedSampleRecord,
@@ -42,7 +48,11 @@ __all__ = [
     "ShadowDistribution",
     "StyleDistribution",
     "StyleSampler",
+    "SubtitleEventSpec",
     "TextCorpus",
     "TextSampler",
+    "compute_event_id",
+    "ms_to_pts",
+    "representative_time_ms",
     "weighted_choice",
 ]
