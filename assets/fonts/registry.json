@@ -29,7 +29,8 @@
         "notes": "仅限本机开发与测试，不可再分发、不可用于训练数据"
       },
       "source_url": null,
-      "registered_at": "2026-08-03"
+      "registered_at": "2026-08-03",
+      "optional": true
     },
     {
       "id": "dejavu-sans",
@@ -44,7 +45,24 @@
         "notes": "拉丁文备用字体，适合作为 fallback 链中的西文兜底"
       },
       "source_url": "https://dejavu-fonts.github.io/",
-      "registered_at": "2026-08-03"
+      "registered_at": "2026-08-03",
+      "optional": true
+    },
+    {
+      "id": "wqy-microhei",
+      "family": "WenQuanYi Micro Hei",
+      "file": "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+      "sha256": "2420e8078af796b19a3f6ef13de527a1a91c1e7171eea115926c614ced1009b3",
+      "license": {
+        "name": "GPLv2+字体例外 / Apache-2.0 双许可（文泉驿微米黑）",
+        "spdx": null,
+        "redistributable": true,
+        "ml_training": true,
+        "notes": "中文字体备用来源；本仓库不携带字体文件"
+      },
+      "source_url": "https://wenq.org/",
+      "registered_at": "2026-08-18",
+      "optional": true
     }
   ]
 }

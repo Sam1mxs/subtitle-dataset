@@ -189,6 +189,10 @@ def run_build(config: WorkflowConfig, outdir: Path, *, force: bool = False) -> R
         "generate": config_sha256(sampling_config.model_dump(mode="json")),
         "export": config_sha256({"export_parquet": config.export_parquet}),
     }
+    registry_path = None
+    if config.registry:
+        raw_registry = Path(config.registry)
+        registry_path = raw_registry if raw_registry.is_absolute() else REPO_ROOT / raw_registry
     run_id = compute_run_id(
         dataset_version=config.dataset_version,
         seed=config.seed,
@@ -217,8 +221,6 @@ def run_build(config: WorkflowConfig, outdir: Path, *, force: bool = False) -> R
     def stage_ingest(ctx: StageContext) -> None:
         frames_dir = ctx.outdir / "frames"
         report = run_ingest(video, ingest_config, frames_dir)
-        ctx.inputs["frames_manifest_path"] = frames_dir / "manifest.json"
-        ctx.inputs["frames_dir"] = frames_dir / "frames"
         ctx.outputs.extend(
             [
                 frames_dir / "manifest.json",
@@ -230,8 +232,8 @@ def run_build(config: WorkflowConfig, outdir: Path, *, force: bool = False) -> R
             raise RuntimeError(f"ingest 存在 {len(report.failures)} 个失败")
 
     def stage_generate(ctx: StageContext) -> None:
-        frames_dir: Path = ctx.inputs["frames_dir"]
-        manifest_path: Path = ctx.inputs["frames_manifest_path"]
+        frames_dir = ctx.outdir / "frames" / "frames"
+        manifest_path = ctx.outdir / "frames" / "manifest.json"
         samples_dir = ctx.outdir / "samples"
         generate_samples(
             clean_dir=frames_dir,
@@ -241,9 +243,8 @@ def run_build(config: WorkflowConfig, outdir: Path, *, force: bool = False) -> R
             outdir=samples_dir,
             n_events=config.n_events,
             source_id=config.source_id,
-            registry_path=Path(config.registry) if config.registry else None,
+            registry_path=registry_path,
         )
-        ctx.inputs["samples_manifest_path"] = samples_dir / "manifest.json"
         ctx.outputs.append(samples_dir / "manifest.json")
 
     def stage_export(ctx: StageContext) -> None:
@@ -254,11 +255,15 @@ def run_build(config: WorkflowConfig, outdir: Path, *, force: bool = False) -> R
         )
 
         parquet_dir = ctx.outdir / "parquet"
-        samples_data = json.loads(ctx.inputs["samples_manifest_path"].read_text(encoding="utf-8"))
+        samples_data = json.loads(
+            (ctx.outdir / "samples" / "manifest.json").read_text(encoding="utf-8")
+        )
         export_samples_manifest(samples_data, parquet_dir)
         if "events" in samples_data:
             export_events_manifest(samples_data, parquet_dir)
-        frames_data = json.loads(ctx.inputs["frames_manifest_path"].read_text(encoding="utf-8"))
+        frames_data = json.loads(
+            (ctx.outdir / "frames" / "manifest.json").read_text(encoding="utf-8")
+        )
         export_ingest_manifest(frames_data, parquet_dir)
         ctx.outputs.append(parquet_dir / "samples.parquet")
 

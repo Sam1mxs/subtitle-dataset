@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from typing import Any
+
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, features
 
 from .config import RenderStyle
 
 _SAFE_MARGIN = 16
+
+_RAQM_AVAILABLE = features.check("raqm")
+
+
+def _shaping_kwargs(style: RenderStyle) -> dict[str, Any]:
+    """返回塑形参数；Pillow 未编译 raqm 时忽略 language/direction。"""
+    kwargs: dict[str, Any] = {}
+    if _RAQM_AVAILABLE:
+        if style.language is not None:
+            kwargs["language"] = style.language
+        if style.direction is not None:
+            kwargs["direction"] = style.direction
+    return kwargs
 
 
 def render_line_layer(
@@ -42,8 +57,7 @@ def render_line_layer(
             stroke_width=stroke_px,
             stroke_fill=style.shadow_color,
             letter_spacing=style.letter_spacing_px,
-            language=style.language,
-            direction=style.direction,
+            **_shaping_kwargs(style),
         )
         if blur_px > 0:
             shadow = shadow.filter(ImageFilter.GaussianBlur(blur_px))
@@ -57,8 +71,7 @@ def render_line_layer(
         stroke_width=stroke_px,
         stroke_fill=style.stroke_color,
         letter_spacing=style.letter_spacing_px,
-        language=style.language,
-        direction=style.direction,
+        **_shaping_kwargs(style),
     )
 
     bbox = canvas.getchannel("A").getbbox()

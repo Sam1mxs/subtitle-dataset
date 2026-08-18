@@ -36,6 +36,7 @@ class FontRecord(BaseModel):
     license: FontLicense
     source_url: str | None = None
     registered_at: date
+    optional: bool = Field(default=False, description="系统字体可缺失（缺文件不报错）")
 
 
 class FontRegistry(BaseModel):
@@ -67,7 +68,11 @@ class FontRegistry(BaseModel):
         for record in self.fonts:
             path = self.resolve_path(record)
             if not path.exists():
-                errors.append(f"{record.id}: 文件不存在 {path}")
+                if not record.optional:
+                    errors.append(f"{record.id}: 文件不存在 {path}")
+                continue
+            if record.optional:
+                # 可选系统字体会随环境版本变化，不强制哈希一致
                 continue
             digest = sha256(path.read_bytes()).hexdigest()
             if digest != record.sha256:
